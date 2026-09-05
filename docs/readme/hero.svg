@@ -1,0 +1,45 @@
+<svg width="1400" height="720" viewBox="0 0 1400 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Journey to Bread</title>
+  <desc id="desc">A restrained title card for a scroll-driven journey from wheat to bread.</desc>
+  <defs>
+    <pattern id="grain" width="5" height="5" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.55" fill="#F1EADB" fill-opacity="0.16"/>
+    </pattern>
+    <radialGradient id="vignette" cx="50%" cy="44%" r="72%">
+      <stop offset="0" stop-color="#192017" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#0A0D0C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1400" height="720" fill="#0A0D0C"/>
+  <rect width="1400" height="720" fill="url(#vignette)"/>
+  <rect width="1400" height="720" fill="url(#grain)" opacity="0.35"/>
+  <rect x="28" y="28" width="1344" height="664" stroke="#F1EADB" stroke-opacity="0.13"/>
+
+  <path d="M72 146H1328" stroke="#D6A84D" stroke-opacity="0.32"/>
+  <path d="M72 604H1328" stroke="#F1EADB" stroke-opacity="0.12"/>
+  <path d="M72 616H392" stroke="#D6A84D" stroke-opacity="0.55"/>
+  <path d="M1008 616H1328" stroke="#D6A84D" stroke-opacity="0.55"/>
+
+  <g fill="#F1EADB" font-family="Courier New, monospace" font-size="13" letter-spacing="2.5">
+    <text x="72" y="82" fill-opacity="0.72">01 / 09</text>
+    <text x="72" y="106" fill-opacity="0.38">FIELD → LOAF</text>
+    <text x="1328" y="82" text-anchor="end" fill-opacity="0.72">WEBGL EXPERIENCE</text>
+    <text x="1328" y="106" text-anchor="end" fill-opacity="0.38">2026</text>
+  </g>
+
+  <g fill="#F1EADB" font-family="Arial Narrow, Helvetica Neue, Arial, sans-serif" text-anchor="middle">
+    <text x="700" y="302" font-size="106" letter-spacing="15" fill-opacity="0.96">JOURNEY</text>
+    <text x="700" y="383" font-size="24" letter-spacing="13" fill="#D6A84D" fill-opacity="0.9">TO</text>
+    <text x="700" y="535" font-size="160" letter-spacing="13" fill-opacity="0.98">BREAD</text>
+  </g>
+
+  <path d="M700 170V218" stroke="#D6A84D" stroke-opacity="0.72"/>
+  <path d="M700 556V592" stroke="#D6A84D" stroke-opacity="0.72"/>
+  <circle cx="700" cy="160" r="4" fill="#D6A84D"/>
+
+  <g fill="#F1EADB" font-family="Courier New, monospace" text-anchor="middle">
+    <text x="700" y="644" font-size="12" letter-spacing="3" fill-opacity="0.68">WHEAT — FLOUR — DOUGH — HEAT — BREAD</text>
+    <text x="700" y="672" font-size="11" letter-spacing="2.4" fill-opacity="0.38">A GRAIN. A FIELD. TIME, TRANSFORMED.</text>
+  </g>
+</svg>

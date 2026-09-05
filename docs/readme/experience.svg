@@ -1,0 +1,65 @@
+<svg width="1400" height="700" viewBox="0 0 1400 700" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Journey to Bread — Bread</title>
+  <desc id="desc">An editorial still of the final bread stage, with a warm loaf resting on a dark table.</desc>
+  <defs>
+    <linearGradient id="crust" x1="700" y1="235" x2="700" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0A04D"/>
+      <stop offset="0.62" stop-color="#B86928"/>
+      <stop offset="1" stop-color="#6B2F13"/>
+    </linearGradient>
+    <linearGradient id="crumb" x1="700" y1="284" x2="700" y2="459" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2D5A0"/>
+      <stop offset="1" stop-color="#D98C43"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="55%">
+      <stop stop-color="#C84C20" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#C84C20" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1400" height="700" fill="#0A0D0C"/>
+  <rect width="1400" height="700" fill="url(#glow)"/>
+  <rect x="28" y="28" width="1344" height="644" stroke="#F1EADB" stroke-opacity="0.13"/>
+
+  <g fill="#F1EADB" font-family="Courier New, monospace" font-size="13" letter-spacing="2.5">
+    <text x="72" y="82" fill-opacity="0.52">09 / 09</text>
+    <text x="180" y="82" fill-opacity="0.92">BREAD</text>
+    <text x="1328" y="82" text-anchor="end" fill-opacity="0.72">00:00</text>
+    <text x="700" y="132" text-anchor="middle" font-size="11" letter-spacing="3" fill-opacity="0.52">WHEAT. WATER. SALT. TIME.</text>
+  </g>
+
+  <path d="M210 566H1190" stroke="#D6A84D" stroke-opacity="0.32"/>
+  <path d="M280 579H1120" stroke="#F1EADB" stroke-opacity="0.08"/>
+  <ellipse cx="700" cy="535" rx="387" ry="44" fill="#000000" fill-opacity="0.64"/>
+
+  <path d="M368 468C377 354 498 246 700 246C902 246 1023 354 1032 468C1000 503 915 530 700 530C485 530 400 503 368 468Z" fill="#5C2811"/>
+  <path d="M384 454C394 348 506 263 700 263C894 263 1006 348 1016 454C984 485 900 508 700 508C500 508 416 485 384 454Z" fill="url(#crust)"/>
+  <path d="M418 399C454 318 556 282 700 282C844 282 946 318 982 399C903 373 803 360 700 360C597 360 497 373 418 399Z" fill="#F0A75B" fill-opacity="0.28"/>
+  <path d="M411 454C503 480 897 480 989 454" stroke="#F2D5A0" stroke-opacity="0.19" stroke-width="7"/>
+
+  <g stroke="#6A2A10" stroke-linecap="round">
+    <path d="M525 333L598 350" stroke-width="14"/>
+    <path d="M524 331L594 348" stroke="#F2D5A0" stroke-opacity="0.25" stroke-width="3"/>
+    <path d="M657 298L690 326" stroke-width="13"/>
+    <path d="M657 296L689 323" stroke="#F2D5A0" stroke-opacity="0.24" stroke-width="3"/>
+    <path d="M785 326L859 303" stroke-width="14"/>
+    <path d="M787 323L858 300" stroke="#F2D5A0" stroke-opacity="0.23" stroke-width="3"/>
+  </g>
+
+  <path d="M646 381C667 367 733 367 754 381C769 391 769 419 754 430C733 445 667 445 646 430C631 419 631 391 646 381Z" fill="url(#crumb)" fill-opacity="0.52"/>
+  <circle cx="681" cy="402" r="7" fill="#B86928" fill-opacity="0.42"/>
+  <circle cx="733" cy="414" r="5" fill="#B86928" fill-opacity="0.34"/>
+  <circle cx="716" cy="389" r="4" fill="#B86928" fill-opacity="0.35"/>
+
+  <g fill="#D6A84D" fill-opacity="0.8">
+    <circle cx="441" cy="548" r="3"/>
+    <circle cx="966" cy="551" r="2.5"/>
+    <circle cx="1028" cy="532" r="2"/>
+    <circle cx="367" cy="530" r="2"/>
+  </g>
+
+  <g fill="#F1EADB" font-family="Courier New, monospace" text-anchor="middle">
+    <text x="700" y="617" font-size="11" letter-spacing="3" fill-opacity="0.54">THE LAST TRANSFORMATION</text>
+    <text x="700" y="649" font-size="12" letter-spacing="3.2" fill-opacity="0.78">BREAD.</text>
+  </g>
+</svg>
