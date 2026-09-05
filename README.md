@@ -5,7 +5,7 @@
 <p align="center">
   <sub>A SCROLL-DRIVEN WEBGL PASSAGE FROM FIELD TO FINISHED LOAF.</sub>
   <br><br>
-  <a href="https://chrisriv10.github.io/JourneytoBread/"><strong>ENTER THE EXPERIENCE ↗</strong></a>
+  <a href="https://chrisriv10.github.io/JourneytoBread/"><strong>ENTER THE EXPERIENCE</strong></a>
 </p>
 
 <br>
