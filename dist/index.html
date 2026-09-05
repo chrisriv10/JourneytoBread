@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c0d0b" />
+    <meta name="description" content="Follow one grain from field to finished loaf in a scroll-driven low-poly journey." />
+    <title>Journey to Bread</title>
+    <script type="module" crossorigin src="/assets/index-BowxtrDy.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cf2x1qH_.css">
+  </head>
+  <body>
+    <div id="app">
+      <div id="experience" aria-hidden="true"></div>
+      <div id="scroll-rail"></div>
+
+      <div id="loader" class="loader" role="status" aria-live="polite">
+        <div class="loader__ring" aria-hidden="true"><span></span></div>
+        <p><span>Now</span> growing</p>
+      </div>
+
+      <main class="hud" aria-label="Journey to Bread experience">
+        <div class="hud__brand">JOURNEY TO BREAD</div>
+
+        <div class="hud__stage" aria-live="polite">
+          <span class="hud__stage-number" id="stage-number">01 / 09</span>
+          <span class="hud__stage-label" id="stage-label">WHEAT</span>
+        </div>
+
+        <div class="hud__timer" id="timer" aria-label="Journey progress countdown">02:00</div>
+
+        <div class="hud__intro" id="intro-copy">
+          <p>IT STARTS WITH A SEED.</p>
+          <span class="hud__scroll-hint"><i></i> Scroll to begin</span>
+        </div>
+
+        <div class="scene-copy" id="scene-copy" aria-live="polite"></div>
+
+        <div class="hud__finish" id="finish-copy" aria-hidden="true">
+          <p class="hud__finish-title">BREAD.</p>
+          <p class="hud__finish-meta">WHEAT. WATER. SALT. TIME.</p>
+          <button id="replay" class="replay" type="button">Replay journey <span>↻</span></button>
+        </div>
+
+        <button id="sound-toggle" class="sound-toggle" type="button" aria-pressed="false" aria-label="Turn sound on">
+          <span class="sound-toggle__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span id="sound-label">Sound off</span>
+        </button>
+      </main>
+
+      <div id="fallback" class="fallback" hidden>
+        <p class="fallback__eyebrow">JOURNEY TO BREAD</p>
+        <h1>This journey needs WebGL.</h1>
+        <p>Open it in a modern browser with hardware acceleration enabled to follow the grain from field to loaf.</p>
+      </div>
+    </div>
+  </body>
+</html>
