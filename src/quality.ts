@@ -10,7 +10,7 @@ export function getQualityConfig(): QualityConfig {
     mobile,
     reducedMotion,
     dpr: Math.min(window.devicePixelRatio || 1, mobile ? 1.1 : cautious ? 1.35 : 1.65),
-    wheatCount: mobile ? 420 : cautious ? 850 : 1450,
+    wheatCount: mobile ? 180 : cautious ? 360 : 620,
     flourCount: mobile ? 520 : cautious ? 1100 : 2200,
     crumbCount: mobile ? 28 : 58,
     bloom: !mobile && !reducedMotion && !cautious,

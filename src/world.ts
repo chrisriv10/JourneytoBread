@@ -39,6 +39,7 @@ export class JourneyWorld {
   private readonly flourCloud = new THREE.Group()
   private readonly bowlGroup = new THREE.Group()
   private readonly ingredientsGroup = new THREE.Group()
+  private readonly mixingSpoon = new THREE.Group()
   private readonly doughGroup = new THREE.Group()
   private readonly bubblesGroup = new THREE.Group()
   private readonly ovenGroup = new THREE.Group()
@@ -133,7 +134,7 @@ export class JourneyWorld {
     this.kernel = this.createKernel()
     this.createMillstones()
     ;[this.flourPoints, this.flourPositions, this.flourSeeds] = this.createFlourCloud()
-    this.flourCloud.add(this.flourPoints)
+    this.flourCloud.add(this.flourPoints, this.createFlourPile())
     this.createBowlAndIngredients()
     this.shapedDough = this.createDoughWorld()
     this.createBubbles()
@@ -283,11 +284,11 @@ export class JourneyWorld {
     this.bowlGroup.position.set(0, THREE.MathUtils.lerp(-1.2, -0.6, smoothstep(bowlProgress)), THREE.MathUtils.lerp(0.7, -0.5, smoothstep(bowlProgress)))
     this.bowlGroup.scale.setScalar(THREE.MathUtils.lerp(0.45, 1.05, smoothstep(rangeProgress(p, 0.4, 0.55))))
     this.ingredientsGroup.position.copy(this.bowlGroup.position)
-    this.ingredientsGroup.position.y += THREE.MathUtils.lerp(0.95, 0.08, smoothstep(rangeProgress(p, 0.48, 0.61)))
+    this.ingredientsGroup.position.y += THREE.MathUtils.lerp(0.12, -0.04, smoothstep(rangeProgress(p, 0.48, 0.61)))
     setOpacity(this.ingredientsGroup, overlapOpacity(p, 0.48, 0.62, 0.035))
-    this.water.position.y = THREE.MathUtils.lerp(1.35, 0.4, smoothstep(rangeProgress(p, 0.48, 0.58)))
+    this.water.position.y = THREE.MathUtils.lerp(0.8, 0.28, smoothstep(rangeProgress(p, 0.48, 0.58)))
     const waterScale = THREE.MathUtils.lerp(0.55, 0.95, smoothstep(rangeProgress(p, 0.48, 0.58)))
-    this.water.scale.set(waterScale, waterScale * 0.58, waterScale)
+    this.water.scale.set(waterScale * 0.62, waterScale * 0.88, waterScale * 0.62)
 
     const doughProgress = rangeProgress(p, 0.58, 0.75)
     setOpacity(this.doughGroup, overlapOpacity(p, 0.58, 0.84, 0.04))
@@ -314,7 +315,7 @@ export class JourneyWorld {
     this.ovenGroup.position.set(0, -0.05, THREE.MathUtils.lerp(-2.2, 0.05, smoothstep(ovenProgress)))
     this.ovenGroup.scale.setScalar(THREE.MathUtils.lerp(0.72, 1.08, smoothstep(rangeProgress(p, 0.77, 0.89))))
     this.ovenLoaf.position.set(0, THREE.MathUtils.lerp(-0.45, -0.13, smoothstep(ovenProgress)), 0.72)
-    this.ovenLoaf.scale.set(0.62 + smoothstep(ovenProgress) * 0.14, 0.52 + smoothstep(ovenProgress) * 0.14, 0.58 + smoothstep(ovenProgress) * 0.12)
+    this.ovenLoaf.scale.set(0.52 + smoothstep(ovenProgress) * 0.1, 0.42 + smoothstep(ovenProgress) * 0.1, 0.5 + smoothstep(ovenProgress) * 0.08)
     this.updateOvenMaterial(ovenProgress)
     this.ovenLight.intensity = ovenVisibility * smoothstep(rangeProgress(p, 0.78, 0.98)) * 4.7
     this.breadLight.intensity = smoothstep(rangeProgress(p, 0.87, 1)) * 4.2
@@ -417,13 +418,13 @@ export class JourneyWorld {
 
       tempObject.position.set(sample.x + sway * 0.12, -1.15 + sample.y + sample.height * 0.55, sample.z)
       tempObject.rotation.set(0, sample.lean, sway)
-      tempObject.scale.set(0.55, sample.height * 0.62, 0.55)
+      tempObject.scale.set(0.34, sample.height * 0.28, 0.34)
       tempObject.updateMatrix()
       this.wheatHeads.setMatrixAt(i, tempObject.matrix)
 
       tempObject.position.set(sample.x + Math.sin(sample.phase) * 0.04, -1.15 + sample.y + sample.height * 0.36, sample.z)
       tempObject.rotation.set(0.25, sample.lean + Math.sin(sample.phase) * 0.4, sway * 1.4)
-      tempObject.scale.set(0.48, sample.height * 0.24, 0.48)
+      tempObject.scale.set(0.42, sample.height * 0.16, 0.42)
       tempObject.updateMatrix()
       this.wheatLeaves.setMatrixAt(i, tempObject.matrix)
     }
@@ -441,7 +442,7 @@ export class JourneyWorld {
       const seedY = this.flourSeeds[i + 1]
       const seedZ = this.flourSeeds[i + 2]
       const angle = context.time * drift + i * 0.002
-      const spread = THREE.MathUtils.lerp(0.3, 0.78, burst)
+      const spread = THREE.MathUtils.lerp(0.18, 0.52, burst)
       positions.setXYZ(
         i / 3,
         seedX * spread + Math.sin(angle + seedY) * 0.08,
@@ -451,15 +452,15 @@ export class JourneyWorld {
     }
     positions.needsUpdate = true
     const visibility = overlapOpacity(this.progress, 0.32, 0.47, 0.035)
-    const opacity = visibility * THREE.MathUtils.lerp(0.1, 0.86, burst) * (1 - smoothstep(rangeProgress(flourProgress, 0.8, 1)))
+    const opacity = visibility * THREE.MathUtils.lerp(0.04, 0.28, burst) * (1 - smoothstep(rangeProgress(flourProgress, 0.8, 1)))
     ;(this.flourPoints.material as THREE.PointsMaterial).opacity = opacity
   }
 
   private applyDoughVariants(progress: number, context: RenderContext) {
     const visibility = overlapOpacity(this.progress, 0.58, 0.84, 0.04)
     const rough = 1 - smoothstep(rangeProgress(progress, 0.12, 0.3))
-    const ball = smoothstep(rangeProgress(progress, 0.2, 0.57)) * (1 - smoothstep(rangeProgress(progress, 0.58, 0.78)))
-    const folded = smoothstep(rangeProgress(progress, 0.48, 0.72)) * (1 - smoothstep(rangeProgress(progress, 0.74, 0.9)))
+    const ball = smoothstep(rangeProgress(progress, 0.12, 0.26)) * (1 - smoothstep(rangeProgress(progress, 0.28, 0.42)))
+    const folded = smoothstep(rangeProgress(progress, 0.34, 0.5)) * (1 - smoothstep(rangeProgress(progress, 0.7, 0.86)))
     const shaped = smoothstep(rangeProgress(progress, 0.72, 1))
     setOpacity(this.doughVariants[0], visibility * rough)
     setOpacity(this.doughVariants[1], visibility * Math.max(ball, 0.02))
@@ -471,6 +472,8 @@ export class JourneyWorld {
     this.doughVariants[2].rotation.z = Math.sin(context.time * 0.8) * 0.04
     this.doughVariants[2].scale.set(0.92, 0.65, 0.72)
     this.shapedDough.scale.set(0.86 + shaped * 0.12, 0.58 + shaped * 0.15, 0.7 + shaped * 0.08)
+    this.mixingSpoon.rotation.z = THREE.MathUtils.lerp(-0.32, 0.26, smoothstep(rangeProgress(this.progress, 0.49, 0.61)))
+    this.mixingSpoon.rotation.y = Math.sin(context.time * 1.8) * 0.05
   }
 
   private updateBubbles(progress: number, context: RenderContext) {
@@ -548,7 +551,7 @@ export class JourneyWorld {
     const count = this.quality.wheatCount
     const stalkGeometry = new THREE.CylinderGeometry(0.018, 0.04, 1, 6)
     const headGeometry = fieldKernelGeometry()
-    const leafGeometry = new THREE.BoxGeometry(0.12, 0.48, 0.035)
+    const leafGeometry = new THREE.BoxGeometry(0.055, 0.26, 0.018)
     const stalkMaterial = material(0x69844b, { roughness: 0.96, emissive: 0x1b2d12, emissiveIntensity: 0.24, vertexColors: true })
     const headMaterial = material(PALETTE.wheat, { roughness: 0.84, emissive: 0x3f2b08, emissiveIntensity: 0.16, vertexColors: true })
     const leafMaterial = material(0x476638, { roughness: 0.96, emissive: 0x16280f, emissiveIntensity: 0.28, vertexColors: true, side: THREE.DoubleSide })
@@ -587,12 +590,12 @@ export class JourneyWorld {
       tempObject.updateMatrix()
       stalks.setMatrixAt(i, tempObject.matrix)
       tempObject.position.set(x, -1.15 + sample.y + height * 0.54, z)
-      tempObject.scale.set(variation * 0.9, height * 0.54, variation * 0.9)
+      tempObject.scale.set(variation * 0.34, height * 0.28, variation * 0.34)
       tempObject.updateMatrix()
       heads.setMatrixAt(i, tempObject.matrix)
       tempObject.position.set(x, -1.15 + sample.y + height * 0.34, z)
       tempObject.rotation.set(0.28, sample.lean + 0.35, -0.18)
-      tempObject.scale.set(variation, height * 0.24, variation)
+      tempObject.scale.set(variation * 0.42, height * 0.16, variation * 0.42)
       tempObject.updateMatrix()
       leaves.setMatrixAt(i, tempObject.matrix)
     }
@@ -613,15 +616,15 @@ export class JourneyWorld {
   }
 
   private createFocalWheat() {
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.055, 2.9, 6), material(PALETTE.mossLight, { roughness: 0.92 }))
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.055, 2.9, 6), material(PALETTE.mossLight, { roughness: 0.92, emissive: 0x2b4f18, emissiveIntensity: 0.38 }))
     stem.position.y = 0.36
     stem.rotation.z = -0.07
     stem.castShadow = this.quality.shadows
     this.focalWheat.add(stem)
 
     const head = new THREE.Group()
-    const headMaterial = material(PALETTE.wheatLight, { roughness: 0.76, emissive: 0x6d4810, emissiveIntensity: 0.18 })
-    const awnMaterial = material(0xe9bd5f, { roughness: 0.78, emissive: 0x4f330b, emissiveIntensity: 0.12 })
+    const headMaterial = material(PALETTE.wheatLight, { roughness: 0.76, emissive: 0x8c6018, emissiveIntensity: 0.38 })
+    const awnMaterial = material(0xe9bd5f, { roughness: 0.78, emissive: 0x6b470d, emissiveIntensity: 0.28 })
     for (let i = 0; i < 8; i += 1) {
       const grain = new THREE.Mesh(kernelGeometry(), headMaterial)
       const side = i % 2 ? 1 : -1
@@ -663,24 +666,24 @@ export class JourneyWorld {
     const stoneMaterial = material(0x777466, { roughness: 0.94 })
     const edgeMaterial = material(0xb0a68b, { roughness: 0.84 })
     const darkEdgeMaterial = material(0x35372f, { roughness: 0.98 })
-    for (const y of [0.8, -0.82]) {
+    for (const y of [0.36, -0.38]) {
       const stone = new THREE.Group()
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.45, 0.48, 16), stoneMaterial)
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(1.42, 1.32, 0.4, 16), stoneMaterial)
       body.castShadow = body.receiveShadow = this.quality.shadows
       stone.add(body)
-      const sideBand = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.055, 6, 32), edgeMaterial)
+      const sideBand = new THREE.Mesh(new THREE.TorusGeometry(1.36, 0.055, 6, 32), edgeMaterial)
       sideBand.rotation.x = Math.PI / 2
       stone.add(sideBand)
       const center = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.13, 6, 18), edgeMaterial)
       center.rotation.x = Math.PI / 2
       stone.add(center)
       const centerHole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.035, 16), darkEdgeMaterial)
-      centerHole.position.y = 0.25
+      centerHole.position.y = 0.21
       stone.add(centerHole)
       for (let i = 0; i < 5; i += 1) {
-        const groove = new THREE.Mesh(new THREE.TorusGeometry(0.56 + i * 0.19, 0.022, 5, 28), edgeMaterial)
+        const groove = new THREE.Mesh(new THREE.TorusGeometry(0.52 + i * 0.17, 0.022, 5, 28), edgeMaterial)
         groove.rotation.x = Math.PI / 2
-        groove.position.y = 0.245 * (i % 2 ? -1 : 1)
+        groove.position.y = 0.205 * (i % 2 ? -1 : 1)
         groove.scale.x = 1 + Math.sin(i) * 0.02
         stone.add(groove)
       }
@@ -688,15 +691,27 @@ export class JourneyWorld {
       this.stones.push(stone)
       this.millGroup.add(stone)
     }
-    const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 2.1, 10), darkEdgeMaterial)
+    const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.94, 10), darkEdgeMaterial)
     spindle.position.y = 0
     this.millGroup.add(spindle)
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.12, 12), edgeMaterial)
-    cap.position.y = 0.97
-    this.millGroup.add(cap)
+    const millHopper = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.15, 0.28, 10), material(0x8c6a43, { roughness: 0.9 }))
+    millHopper.position.y = 0.79
+    millHopper.castShadow = this.quality.shadows
+    const hopperThroat = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.18, 10), material(0x5b402b, { roughness: 0.94 }))
+    hopperThroat.position.y = 0.59
+    this.millGroup.add(millHopper, hopperThroat)
+    const radialCuts = new THREE.Group()
+    radialCuts.position.y = 0.575
+    for (let i = 0; i < 6; i += 1) {
+      const cut = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.018, 0.028), edgeMaterial)
+      cut.position.x = 0.48
+      cut.rotation.y = (i / 6) * Math.PI
+      radialCuts.add(cut)
+    }
+    this.millGroup.add(radialCuts)
     const shadow = new THREE.Mesh(new THREE.CircleGeometry(2.4, 32), material(0x161512, { roughness: 1, opacity: 0.66 }))
     shadow.rotation.x = -Math.PI / 2
-    shadow.position.y = -1.08
+    shadow.position.y = -0.64
     shadow.position.z = 0.2
     this.millGroup.add(shadow)
   }
@@ -712,9 +727,9 @@ export class JourneyWorld {
     }
     for (let i = 0; i < count; i += 1) {
       const i3 = i * 3
-      const radius = Math.pow(random(), 1.25) * 1.15
+      const radius = Math.pow(random(), 1.55) * 0.92
       const angle = random() * Math.PI * 2
-      const y = (random() - 0.5) * 1.15
+      const y = (random() - 0.5) * 0.72 + (1 - radius / 0.92) * 0.12
       const x = Math.cos(angle) * radius
       const z = Math.sin(angle) * radius * 0.65
       seeds[i3] = x
@@ -726,9 +741,34 @@ export class JourneyWorld {
     }
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    const points = new THREE.Points(geometry, pointsMaterial(PALETTE.flour, this.quality.mobile ? 0.08 : 0.1, 0))
+    const points = new THREE.Points(geometry, pointsMaterial(PALETTE.flour, this.quality.mobile ? 0.045 : 0.06, 0))
     points.frustumCulled = false
     return [points, positions, seeds]
+  }
+
+  private createFlourPile() {
+    const profile = [
+      new THREE.Vector2(0.02, -0.08),
+      new THREE.Vector2(0.3, -0.09),
+      new THREE.Vector2(0.58, -0.07),
+      new THREE.Vector2(0.78, 0.0),
+      new THREE.Vector2(0.9, 0.11),
+      new THREE.Vector2(0.86, 0.22),
+      new THREE.Vector2(0.7, 0.32),
+      new THREE.Vector2(0.52, 0.42),
+      new THREE.Vector2(0.32, 0.51),
+      new THREE.Vector2(0.12, 0.56),
+      new THREE.Vector2(0.02, 0.57),
+    ]
+    const pile = new THREE.Mesh(new THREE.LatheGeometry(profile, 24), new THREE.MeshBasicMaterial({ color: 0xfff3dc, transparent: true }))
+    pile.position.set(0, -0.62, 0.16)
+    pile.scale.set(1, 0.9, 0.72)
+    pile.castShadow = pile.receiveShadow = this.quality.shadows
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 28), material(0x8d8878, { roughness: 1, opacity: 0.1 }))
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.set(0, -0.7, 0.18)
+    shadow.scale.set(1, 0.55, 1)
+    return new THREE.Group().add(pile, shadow)
   }
 
   private createBowlAndIngredients() {
@@ -754,29 +794,39 @@ export class JourneyWorld {
     flourSurface.position.y = 0.39
     this.bowlGroup.add(flourSurface)
 
-    this.water = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 8), material(0x5ea7c8, { roughness: 0.2, metalness: 0.05, opacity: 0.74, emissive: 0x123947, emissiveIntensity: 0.22 }))
-    this.water.position.set(0.55, 1.9, 0)
-    this.water.scale.set(0.72, 0.46, 0.72)
+    this.water = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 8), material(0x3f9dba, { roughness: 0.2, metalness: 0.05, opacity: 0.78, emissive: 0x123947, emissiveIntensity: 0.22 }))
+    this.water.position.set(0.42, 1.18, 0.04)
+    this.water.scale.set(0.62, 0.9, 0.62)
     this.ingredientsGroup.add(this.water)
     const saltMaterial = material(PALETTE.salt, { roughness: 0.9 })
     for (let i = 0; i < 6; i += 1) {
       const salt = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), saltMaterial)
-      salt.position.set(Math.sin(i * 2.1) * 0.65, 0.65 + (i % 3) * 0.08, Math.cos(i * 1.7) * 0.45)
+      salt.position.set(Math.sin(i * 2.1) * 0.55, 0.42 + (i % 3) * 0.05, Math.cos(i * 1.7) * 0.36)
       this.ingredientsGroup.add(salt)
     }
     const yeastMaterial = material(PALETTE.yeast, { roughness: 0.92 })
     for (let i = 0; i < 5; i += 1) {
       const yeast = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 1), yeastMaterial)
-      yeast.position.set(-0.55 + (i % 2) * 0.18, 0.75 + Math.floor(i / 2) * 0.12, -0.1 + (i % 3) * 0.16)
+      yeast.position.set(-0.38 + (i % 2) * 0.16, 0.48 + Math.floor(i / 2) * 0.08, -0.04 + (i % 3) * 0.12)
       this.ingredientsGroup.add(yeast)
     }
+
+    const spoonHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.95, 8), material(0x7b4b2e, { roughness: 0.84 }))
+    spoonHandle.position.y = 0.5
+    const spoonBowl = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), material(0x9c6239, { roughness: 0.88 }))
+    spoonBowl.position.y = 0.06
+    spoonBowl.scale.set(0.78, 0.28, 1.05)
+    this.mixingSpoon.add(spoonHandle, spoonBowl)
+    this.mixingSpoon.position.set(-0.1, 0.4, 0.48)
+    this.mixingSpoon.rotation.z = -0.32
+    this.ingredientsGroup.add(this.mixingSpoon)
   }
 
   private createDoughWorld() {
-    const rough = new THREE.Mesh(blobGeometry(1.18, 0.7, 0.82, 1), material(PALETTE.dough, { roughness: 0.98 }))
-    const ball = new THREE.Mesh(blobGeometry(0.88, 0.86, 0.84, 2), material(PALETTE.doughLight, { roughness: 0.95 }))
-    const folded = new THREE.Mesh(blobGeometry(1.05, 0.56, 0.72, 2), material(PALETTE.dough, { roughness: 0.92 }))
-    const shaped = new THREE.Mesh(blobGeometry(1.16, 0.64, 0.82, 2), material(PALETTE.doughLight, { roughness: 0.95 }))
+    const rough = new THREE.Mesh(blobGeometry(1.2, 0.52, 0.76, 2), material(PALETTE.dough, { roughness: 0.98 }))
+    const ball = new THREE.Mesh(blobGeometry(0.86, 0.8, 0.8, 3), material(PALETTE.doughLight, { roughness: 0.95 }))
+    const folded = new THREE.Mesh(blobGeometry(1.3, 0.46, 0.78, 3), material(PALETTE.dough, { roughness: 0.92 }))
+    const shaped = new THREE.Mesh(blobGeometry(1.16, 0.64, 0.82, 3), material(PALETTE.doughLight, { roughness: 0.95 }))
     rough.castShadow = ball.castShadow = folded.castShadow = shaped.castShadow = this.quality.shadows
     rough.position.y = 0.08
     ball.position.y = 0.08
@@ -790,9 +840,9 @@ export class JourneyWorld {
   private createBubbles() {
     const bubbleMaterial = material(PALETTE.flour, { roughness: 0.45, opacity: 0.22, transparent: true })
     for (let i = 0; i < 11; i += 1) {
-      const bubble = new THREE.Mesh(new THREE.SphereGeometry(0.045 + (i % 3) * 0.024, 8, 6), bubbleMaterial)
+      const bubble = new THREE.Mesh(new THREE.TorusGeometry(0.07 + (i % 3) * 0.022, 0.018, 6, 14), bubbleMaterial)
       const angle = (i / 11) * Math.PI * 2
-      bubble.position.set(Math.cos(angle) * (0.45 + (i % 2) * 0.35), 0.42 + (i % 4) * 0.14, Math.sin(angle) * 0.38)
+      bubble.position.set(Math.cos(angle) * (0.45 + (i % 2) * 0.35), 0.4 + (i % 4) * 0.14, 0.52 + Math.sin(angle) * 0.08)
       this.bubblesGroup.add(bubble)
     }
   }

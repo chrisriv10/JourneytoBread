@@ -104,6 +104,10 @@ try {
   })
 
   replayButton.addEventListener('click', () => controller?.replay())
+  const previewProgress = Number(new URLSearchParams(window.location.search).get('progress'))
+  if (Number.isFinite(previewProgress) && previewProgress >= 0 && previewProgress <= 1) {
+    window.setTimeout(() => controller?.scrollToProgress(previewProgress), 120)
+  }
   window.setTimeout(() => loader.classList.add('is-hidden'), quality.reducedMotion ? 100 : 900)
 } catch (error) {
   console.error(error)
