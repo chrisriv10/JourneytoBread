@@ -243,13 +243,13 @@ export class JourneyWorld {
     const p = context.progress
     const pointerStrength = context.quality.reducedMotion ? 0.15 : 1
 
-    const fieldOpacity = overlapOpacity(p, 0, 0.16, 0.035)
+    const fieldOpacity = p <= 0.001 ? 1 : overlapOpacity(p, 0, 0.16, 0.035)
     setOpacity(this.fieldGroup, fieldOpacity)
     this.fieldGroup.position.z = -p * 2.8
     this.fieldGroup.rotation.y = context.pointer.x * 0.018 * pointerStrength
     this.updateWheat(context)
 
-    const focalOpacity = overlapOpacity(p, 0.035, 0.17, 0.035)
+    const focalOpacity = p <= 0.001 ? 1 : overlapOpacity(p, 0.035, 0.17, 0.035)
     setOpacity(this.focalWheat, focalOpacity)
     this.focalWheat.position.set(context.pointer.x * 0.1 * pointerStrength, -0.82, -2.5 - p * 1.8)
     this.focalWheat.rotation.z = Math.sin(context.time * 0.7) * 0.025 + context.pointer.x * 0.025 * pointerStrength
