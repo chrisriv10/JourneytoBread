@@ -108,7 +108,7 @@ try {
   if (Number.isFinite(previewProgress) && previewProgress >= 0 && previewProgress <= 1) {
     window.setTimeout(() => controller?.scrollToProgress(previewProgress), 120)
   }
-  window.setTimeout(() => loader.classList.add('is-hidden'), quality.reducedMotion ? 100 : 900)
+  window.setTimeout(() => loader.classList.add('is-hidden'), quality.reducedMotion ? 100 : 360)
 } catch (error) {
   console.error(error)
   experience.hidden = true

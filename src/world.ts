@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { blobGeometry, createScoreCut, fieldKernelGeometry, kernelGeometry, loafGeometry, material, overlapOpacity, PALETTE, pointsMaterial, rangeProgress, setOpacity, smoothstep, smootherstep } from './geometry'
+import { createChapters, type ChapterModel } from './models'
 import type { JourneyState, PointerState, QualityConfig, RenderContext } from './types'
 import { STAGES } from './types'
 
@@ -48,34 +49,35 @@ export class JourneyWorld {
   private readonly crumbsGroup = new THREE.Group()
   private readonly steamGroup = new THREE.Group()
 
-  private readonly wheatField: THREE.InstancedMesh
-  private readonly wheatHeads: THREE.InstancedMesh
-  private readonly wheatLeaves: THREE.InstancedMesh
+  private readonly wheatField!: THREE.InstancedMesh
+  private readonly wheatHeads!: THREE.InstancedMesh
+  private readonly wheatLeaves!: THREE.InstancedMesh
   private readonly fieldSamples: FieldSample[] = []
-  private readonly kernel: THREE.Mesh
+  private readonly kernel!: THREE.Mesh
   private readonly stones: THREE.Group[] = []
-  private readonly flourPoints: THREE.Points
-  private readonly flourPositions: Float32Array
-  private readonly flourSeeds: Float32Array
+  private readonly flourPoints!: THREE.Points
+  private readonly flourPositions!: Float32Array
+  private readonly flourSeeds!: Float32Array
   private water!: THREE.Mesh
   private readonly doughVariants: THREE.Mesh[] = []
-  private shapedDough: THREE.Mesh
-  private readonly ovenLoaf: THREE.Mesh
-  private readonly ovenGlow: THREE.Mesh
-  private readonly loafWhole: THREE.Group
-  private readonly loafSliceA: THREE.Group
-  private readonly loafSliceB: THREE.Group
+  private shapedDough!: THREE.Mesh
+  private readonly ovenLoaf!: THREE.Mesh
+  private readonly ovenGlow!: THREE.Mesh
+  private readonly loafWhole!: THREE.Group
+  private readonly loafSliceA!: THREE.Group
+  private readonly loafSliceB!: THREE.Group
   private readonly knifeGroup = new THREE.Group()
-  private readonly crumbPoints: THREE.Points
-  private readonly crumbPositions: Float32Array
-  private readonly crumbSeeds: Float32Array
-  private readonly steamPoints: THREE.Points
-  private readonly steamPositions: Float32Array
-  private readonly steamSeeds: Float32Array
+  private readonly crumbPoints!: THREE.Points
+  private readonly crumbPositions!: Float32Array
+  private readonly crumbSeeds!: Float32Array
+  private readonly steamPoints!: THREE.Points
+  private readonly steamPositions!: Float32Array
+  private readonly steamSeeds!: Float32Array
   private readonly ovenLight: THREE.PointLight
   private readonly breadLight: THREE.PointLight
   private readonly keyLight: THREE.DirectionalLight
   private readonly fillLight: THREE.HemisphereLight
+  private readonly chapters: ChapterModel[]
 
   constructor(container: HTMLElement, quality: QualityConfig, onStateChange?: (state: JourneyState) => void) {
     this.container = container
@@ -125,43 +127,15 @@ export class JourneyWorld {
     this.breadLight.position.set(1.8, 2.2, 4.2)
     this.scene.add(this.fillLight, this.keyLight, this.ovenLight, this.breadLight)
 
-    this.wheatField = this.createWheatField()
-    this.wheatHeads = this.wheatField.userData.heads as THREE.InstancedMesh
-    this.wheatLeaves = this.wheatField.userData.leaves as THREE.InstancedMesh
-    this.fieldGroup.add(this.wheatField, this.wheatHeads, this.wheatLeaves)
-    this.fieldGroup.add(this.createGround())
-    this.createFocalWheat()
-    this.kernel = this.createKernel()
-    this.createMillstones()
-    ;[this.flourPoints, this.flourPositions, this.flourSeeds] = this.createFlourCloud()
-    this.flourCloud.add(this.flourPoints, this.createFlourPile())
-    this.createBowlAndIngredients()
-    this.shapedDough = this.createDoughWorld()
-    this.createBubbles()
-    ;[this.ovenLoaf, this.ovenGlow] = this.createOven()
-    ;[this.loafWhole, this.loafSliceA, this.loafSliceB] = this.createBreadReveal()
-    this.createTableAndKnife()
-    ;[this.crumbPoints, this.crumbPositions, this.crumbSeeds] = this.createCrumbs()
-    this.crumbsGroup.add(this.crumbPoints)
-    ;[this.steamPoints, this.steamPositions, this.steamSeeds] = this.createSteam()
-    this.steamGroup.add(this.steamPoints)
-
-    this.root.add(
-      this.fieldGroup,
-      this.focalWheat,
-      this.kernelGroup,
-      this.millGroup,
-      this.flourCloud,
-      this.bowlGroup,
-      this.ingredientsGroup,
-      this.doughGroup,
-      this.bubblesGroup,
-      this.ovenGroup,
-      this.breadGroup,
-      this.tableGroup,
-      this.crumbsGroup,
-      this.steamGroup,
-    )
+    // The original prototype remains available below as a reference, but the
+    // rendered journey uses one deliberate tabletop composition per chapter.
+    // Keeping only the new chapter groups attached prevents the old detached
+    // primitives from competing with the story or reading as visual noise.
+    this.chapters = createChapters()
+    this.chapters.forEach(({ group }) => {
+      setOpacity(group, 0)
+      this.root.add(group)
+    })
 
     this.setupEvents()
     this.setProgress(0)
@@ -240,6 +214,11 @@ export class JourneyWorld {
   }
 
   private applyJourney(context: RenderContext) {
+    this.applyChapterJourney(context)
+    return
+
+    // Legacy prototype animation retained below while the new compositions
+    // are tuned. It is intentionally unreachable and no longer rendered.
     const p = context.progress
     const pointerStrength = context.quality.reducedMotion ? 0.15 : 1
 
@@ -320,7 +299,7 @@ export class JourneyWorld {
     this.ovenLight.intensity = ovenVisibility * smoothstep(rangeProgress(p, 0.78, 0.98)) * 4.7
     this.breadLight.intensity = smoothstep(rangeProgress(p, 0.87, 1)) * 4.2
     ;(this.ovenGlow.material as THREE.MeshStandardMaterial).opacity = ovenVisibility * smoothstep(rangeProgress(p, 0.79, 0.96)) * 0.28
-    if (this.bloom) this.bloom.strength = ovenVisibility * smoothstep(rangeProgress(p, 0.78, 0.92)) * 0.22
+    this.bloom!.strength = ovenVisibility * smoothstep(rangeProgress(p, 0.78, 0.92)) * 0.22
     this.updateSteam(ovenProgress, context)
 
     const breadProgress = rangeProgress(p, 0.88, 1)
@@ -338,6 +317,85 @@ export class JourneyWorld {
 
     this.updateCamera(p, context)
     this.updateLighting(p, context)
+  }
+
+  private applyChapterJourney(context: RenderContext) {
+    const p = context.progress
+    const pointerStrength = context.quality.reducedMotion ? 0.15 : 1
+    const ranges: Array<[number, number]> = STAGES.map(({ start, end }, index) => [
+      start,
+      index === STAGES.length - 1 ? 1.01 : end,
+    ])
+    const activeIndex = STAGES.reduce((active, stage, index) => (p >= stage.start ? index : active), 0)
+    const activeStart = STAGES[activeIndex].start
+
+    this.chapters.forEach((chapter, index) => {
+      const [start, end] = ranges[index]
+      // Keep the object and label synchronized. The previous scene eases away
+      // just before a chapter boundary, while the newly labeled scene is fully
+      // readable as soon as its chapter begins.
+      const previousOpacity = index === activeIndex - 1
+        ? 1 - smoothstep((p - (activeStart - 0.04)) / 0.04)
+        : 0
+      const opacity = index === activeIndex ? 1 : THREE.MathUtils.clamp(previousOpacity, 0, 1)
+      setOpacity(chapter.group, opacity)
+      chapter.group.visible = opacity > 0.001
+      if (!chapter.group.visible) return
+
+      const local = rangeProgress(p, start, end)
+      chapter.animate(local, context.time)
+      chapter.group.position.y = Math.sin(local * Math.PI) * 0.045
+      chapter.group.position.x = context.pointer.x * 0.035 * pointerStrength
+      chapter.group.rotation.y = context.pointer.x * 0.018 * pointerStrength
+      chapter.group.scale.setScalar(0.94 + smoothstep(local) * 0.06)
+    })
+
+    this.updateChapterCamera(p, pointerStrength)
+    this.updateChapterLighting(p)
+  }
+
+  private updateChapterCamera(progress: number, pointerStrength: number) {
+    const targetPosition = tempVector.set(0, 1.42, 6.7)
+    const targetLook = tempVector2.set(0, 0.48, 0)
+    if (progress < 0.18) {
+      targetPosition.set(0, 1.23, 6.15)
+      targetLook.set(0, 0.78, -0.2)
+    } else if (progress < 0.42) {
+      targetPosition.set(0, 1.47, 6.85)
+      targetLook.set(0, 0.54, 0)
+    } else if (progress < 0.76) {
+      targetPosition.set(0, 1.72, 6.95)
+      targetLook.set(0, 0.48, 0)
+    } else if (progress < 0.90) {
+      targetPosition.set(0, 1.58, 6.55)
+      targetLook.set(0, 0.55, 0)
+    }
+    targetPosition.x += this.pointer.x * 0.12 * pointerStrength
+    targetLook.x += this.pointer.x * 0.05 * pointerStrength
+    this.camera.position.lerp(targetPosition, 0.085)
+    this.camera.lookAt(targetLook)
+  }
+
+  private updateChapterLighting(progress: number) {
+    const night = tempColor.set(PALETTE.night)
+    const field = new THREE.Color(0x536344)
+    const kitchen = new THREE.Color(0xc4b58e)
+    const oven = new THREE.Color(0x211914)
+    const finish = new THREE.Color(0x10110e)
+    const background = new THREE.Color()
+
+    if (progress < 0.2) background.lerpColors(night, field, smoothstep(progress / 0.2))
+    else if (progress < 0.52) background.lerpColors(field, kitchen, smoothstep((progress - 0.2) / 0.32))
+    else if (progress < 0.82) background.lerpColors(kitchen, oven, smoothstep((progress - 0.52) / 0.3))
+    else background.lerpColors(oven, finish, smoothstep((progress - 0.82) / 0.18))
+
+    this.scene.background = background
+    if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.color.copy(background)
+    this.fillLight.intensity = progress > 0.76 ? 1.05 : 1.45
+    this.keyLight.intensity = progress > 0.76 ? 2.8 : 2.35
+    this.ovenLight.intensity = smoothstep(rangeProgress(progress, 0.76, 0.91)) * 4.2
+    this.breadLight.intensity = smoothstep(rangeProgress(progress, 0.88, 1)) * 1.8
+    if (this.bloom) this.bloom.strength = progress > 0.76 ? 0.28 : 0.16
   }
 
   private updateCamera(progress: number, context: RenderContext) {
