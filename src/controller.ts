@@ -25,7 +25,7 @@ export class JourneyController {
     this.onStateChange = onStateChange
     this.lenis = new Lenis({
       duration: 1.15,
-      smoothWheel: true,
+      smoothWheel: false,
       syncTouch: false,
       touchMultiplier: 1.05,
     })
@@ -69,6 +69,8 @@ export class JourneyController {
     window.removeEventListener('wheel', this.releaseForcedProgress)
     window.removeEventListener('touchstart', this.releaseForcedProgress)
     window.removeEventListener('keydown', this.releaseForcedProgress)
+    window.removeEventListener('scroll', this.handleWindowScroll)
+    window.removeEventListener('wheel', this.handleWheel)
   }
 
   private setupTimeline() {
@@ -98,7 +100,11 @@ export class JourneyController {
       },
     })
 
-    this.lenis.on('scroll', ScrollTrigger.update)
+    this.lenis.on('scroll', (instance) => {
+      ScrollTrigger.update()
+      this.handleNativeScroll(instance.scroll)
+    })
+    window.addEventListener('scroll', this.handleWindowScroll, { passive: true })
     this.tick = (time) => {
       this.lenis.raf(time * 1000)
       if (this.scrollLockFrames > 0) this.scrollLockFrames -= 1
@@ -109,6 +115,7 @@ export class JourneyController {
     gsap.ticker.add(this.tick)
     gsap.ticker.lagSmoothing(0)
     window.addEventListener('wheel', this.releaseForcedProgress, { passive: true })
+    window.addEventListener('wheel', this.handleWheel, { passive: false })
     window.addEventListener('touchstart', this.releaseForcedProgress, { passive: true })
     window.addEventListener('keydown', this.releaseForcedProgress, { passive: true })
     this.world.setProgress(0)
@@ -119,5 +126,24 @@ export class JourneyController {
       this.forcedProgress = null
       this.scrollLockFrames = 8
     }
+  }
+
+  private readonly handleNativeScroll = (scrollTop = window.scrollY) => {
+    if (this.scrollLockFrames > 0 || this.forcedProgress !== null) return
+    const progress = Math.max(0, Math.min(1, scrollTop / this.totalScroll))
+    if (Math.abs(progress - this.progressProxy.value) < 0.0001) return
+    this.progressProxy.value = progress
+    this.onStateChange?.(this.world.setProgress(progress))
+  }
+
+  private readonly handleWindowScroll = () => this.handleNativeScroll()
+
+  private readonly handleWheel = (event: WheelEvent) => {
+    if (event.ctrlKey || event.deltaY === 0) return
+    if (this.forcedProgress !== null) this.releaseForcedProgress()
+    this.scrollLockFrames = 0
+    event.preventDefault()
+    const nextScroll = Math.max(0, Math.min(this.totalScroll, window.scrollY + event.deltaY))
+    window.scrollTo({ top: nextScroll, left: 0, behavior: 'auto' })
   }
 }

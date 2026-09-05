@@ -51,7 +51,8 @@ button {
 
 #scroll-rail {
   position: relative;
-  z-index: -1;
+  z-index: 0;
+  pointer-events: none;
   height: calc(9200px + 100vh);
 }
 
