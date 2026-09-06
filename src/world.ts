@@ -12,62 +12,112 @@ import { PALETTE } from './geometry'
 type ColorKeyframe = Keyframe<THREE.Color>
 
 const cameraPositionKeys: Keyframe<THREE.Vector3>[] = [
-  { at: 0, value: new THREE.Vector3(0, 1.36, 7.8) },
-  { at: 0.12, value: new THREE.Vector3(0, 1.22, 6.15) },
-  { at: 0.25, value: new THREE.Vector3(0.58, 1.52, 6.85) },
-  { at: 0.4, value: new THREE.Vector3(0.1, 4.3, 6.9) },
-  { at: 0.53, value: new THREE.Vector3(0.15, 3.2, 6.6) },
-  { at: 0.64, value: new THREE.Vector3(0, 2.8, 6.5) },
-  { at: 0.74, value: new THREE.Vector3(0, 2.7, 6.4) },
-  { at: 0.84, value: new THREE.Vector3(0.12, 1.85, 6.2) },
-  { at: 0.94, value: new THREE.Vector3(0.4, 2.9, 6.5) },
-  { at: 1, value: new THREE.Vector3(0.3, 3, 6.6) },
+  { at: 0, value: new THREE.Vector3(-0.82, 1.1, 5.25) },
+  { at: 0.08, value: new THREE.Vector3(-0.54, 1.2, 4.6) },
+  { at: 0.15, value: new THREE.Vector3(0.82, 1.72, 4.25) },
+  { at: 0.22, value: new THREE.Vector3(0.95, 1.76, 4.15) },
+  { at: 0.3, value: new THREE.Vector3(-1.44, 1.42, 4.9) },
+  { at: 0.37, value: new THREE.Vector3(1.2, 1.88, 4.82) },
+  { at: 0.45, value: new THREE.Vector3(0.88, 2.72, 5.15) },
+  { at: 0.53, value: new THREE.Vector3(0.84, 2.46, 4.7) },
+  { at: 0.63, value: new THREE.Vector3(-0.82, 1.72, 4.18) },
+  { at: 0.74, value: new THREE.Vector3(0.5, 2.02, 4.45) },
+  { at: 0.85, value: new THREE.Vector3(-0.82, 1.45, 4.02) },
+  { at: 0.93, value: new THREE.Vector3(1.02, 2.06, 4.85) },
+  { at: 0.975, value: new THREE.Vector3(1.8, 1.66, 5.12) },
+  { at: 0.99, value: new THREE.Vector3(2.58, 1.62, 4.72) },
+  { at: 1, value: new THREE.Vector3(3.15, 1.58, 4.45) },
 ]
 
 const cameraLookKeys: Keyframe<THREE.Vector3>[] = [
-  { at: 0, value: new THREE.Vector3(0, 1.3, 0.05) },
-  { at: 0.12, value: new THREE.Vector3(-0.08, 1.5, 0.12) },
-  { at: 0.25, value: new THREE.Vector3(0, 0.55, 0.05) },
-  { at: 0.42, value: new THREE.Vector3(0, 0.32, 0.05) },
-  { at: 0.58, value: new THREE.Vector3(0, 0.36, 0.04) },
-  { at: 0.72, value: new THREE.Vector3(0, 0.26, 0.04) },
-  { at: 0.84, value: new THREE.Vector3(0, 0.8, -1.3) },
-  { at: 0.95, value: new THREE.Vector3(0, -0.34, 0.22) },
-  { at: 1, value: new THREE.Vector3(0, -0.36, 0.22) },
+  { at: 0, value: new THREE.Vector3(-0.2, 1.48, -0.02) },
+  { at: 0.13, value: new THREE.Vector3(-0.04, 1.7, 0.34) },
+  { at: 0.22, value: new THREE.Vector3(0.08, 1.48, 0.4) },
+  { at: 0.3, value: new THREE.Vector3(0.06, 0.73, -0.22) },
+  { at: 0.37, value: new THREE.Vector3(-0.38, 0.42, 0.25) },
+  { at: 0.45, value: new THREE.Vector3(0.28, 0.3, 0.22) },
+  { at: 0.53, value: new THREE.Vector3(0.02, 0.38, 0.16) },
+  { at: 0.63, value: new THREE.Vector3(0.02, 0.3, 0.12) },
+  { at: 0.74, value: new THREE.Vector3(0.02, 0.32, 0.14) },
+  { at: 0.85, value: new THREE.Vector3(0.02, 0.68, -1.4) },
+  { at: 0.93, value: new THREE.Vector3(0.14, 0.25, 0.46) },
+  { at: 1, value: new THREE.Vector3(0.02, 0.42, 0.47) },
 ]
 
 const cameraFovKeys: Keyframe<number>[] = [
-  { at: 0, value: 34 },
-  { at: 0.22, value: 32 },
+  { at: 0, value: 32 },
+  { at: 0.13, value: 28 },
+  { at: 0.22, value: 27 },
+  { at: 0.3, value: 34 },
   { at: 0.45, value: 35 },
-  { at: 0.7, value: 34 },
-  { at: 0.84, value: 37 },
-  { at: 1, value: 33 },
+  { at: 0.63, value: 31 },
+  { at: 0.74, value: 33 },
+  { at: 0.85, value: 36 },
+  { at: 0.93, value: 34 },
+  { at: 1, value: 31 },
 ]
 
 const backgroundKeys: ColorKeyframe[] = [
   { at: 0, value: new THREE.Color(PALETTE.night) },
-  { at: 0.12, value: new THREE.Color(0x31442a) },
-  { at: 0.28, value: new THREE.Color(0x536344) },
-  { at: 0.48, value: new THREE.Color(0x9b9a70) },
-  { at: 0.66, value: new THREE.Color(0xc2b596) },
-  { at: 0.82, value: new THREE.Color(0x2b2118) },
-  { at: 1, value: new THREE.Color(0x0a0d0c) },
+  { at: 0.08, value: new THREE.Color(0x121b11) },
+  { at: 0.17, value: new THREE.Color(0x293722) },
+  { at: 0.25, value: new THREE.Color(0x35402b) },
+  { at: 0.34, value: new THREE.Color(0x47473b) },
+  { at: 0.43, value: new THREE.Color(0x7f7b65) },
+  { at: 0.5, value: new THREE.Color(0xb0a58a) },
+  { at: 0.66, value: new THREE.Color(0xa59678) },
+  { at: 0.75, value: new THREE.Color(0x80735d) },
+  { at: 0.82, value: new THREE.Color(0x21150f) },
+  { at: 0.93, value: new THREE.Color(0x120b08) },
+  { at: 1, value: new THREE.Color(0x080908) },
 ]
 
 const keyLightColorKeys: ColorKeyframe[] = [
-  { at: 0, value: new THREE.Color(0xc5d09c) },
-  { at: 0.3, value: new THREE.Color(0xffd58d) },
-  { at: 0.66, value: new THREE.Color(0xffe0a2) },
-  { at: 0.82, value: new THREE.Color(0xff9b52) },
+  { at: 0, value: new THREE.Color(0xb7c58d) },
+  { at: 0.16, value: new THREE.Color(0xf2c96f) },
+  { at: 0.3, value: new THREE.Color(0xe7c891) },
+  { at: 0.5, value: new THREE.Color(0xffe0ad) },
+  { at: 0.74, value: new THREE.Color(0xf1c783) },
+  { at: 0.84, value: new THREE.Color(0xff8a43) },
   { at: 1, value: new THREE.Color(0xffc17d) },
 ]
 
 const keyLightPositionKeys: Keyframe<THREE.Vector3>[] = [
-  { at: 0, value: new THREE.Vector3(-4, 7, 5) },
-  { at: 0.46, value: new THREE.Vector3(-3.5, 6, 4) },
-  { at: 0.82, value: new THREE.Vector3(-2.5, 4.5, 2.5) },
-  { at: 1, value: new THREE.Vector3(3, 5, 4) },
+  { at: 0, value: new THREE.Vector3(-4.5, 6.2, 2.4) },
+  { at: 0.18, value: new THREE.Vector3(-2.8, 5.4, 3.2) },
+  { at: 0.32, value: new THREE.Vector3(3.4, 5.6, 3.6) },
+  { at: 0.5, value: new THREE.Vector3(-3.8, 6.2, 3.4) },
+  { at: 0.74, value: new THREE.Vector3(3.1, 5.4, 3.0) },
+  { at: 0.84, value: new THREE.Vector3(-2.3, 3.4, 1.2) },
+  { at: 1, value: new THREE.Vector3(-3.4, 4.8, 3.2) },
+]
+
+const ambientIntensityKeys: Keyframe<number>[] = [
+  { at: 0, value: 0.035 }, { at: 0.2, value: 0.065 }, { at: 0.48, value: 0.11 },
+  { at: 0.68, value: 0.09 }, { at: 0.84, value: 0.025 }, { at: 1, value: 0.025 },
+]
+
+const fillIntensityKeys: Keyframe<number>[] = [
+  { at: 0, value: 0.34 }, { at: 0.16, value: 0.48 }, { at: 0.34, value: 0.42 },
+  { at: 0.5, value: 0.64 }, { at: 0.68, value: 0.56 }, { at: 0.84, value: 0.2 },
+  { at: 1, value: 0.18 },
+]
+
+const keyIntensityKeys: Keyframe<number>[] = [
+  { at: 0, value: 2.0 }, { at: 0.16, value: 2.7 }, { at: 0.3, value: 3.0 },
+  { at: 0.5, value: 2.55 }, { at: 0.68, value: 2.7 }, { at: 0.76, value: 2.25 },
+  { at: 0.84, value: 1.85 }, { at: 1, value: 3.15 },
+]
+
+const exposureKeys: Keyframe<number>[] = [
+  { at: 0, value: 0.84 }, { at: 0.18, value: 0.92 }, { at: 0.5, value: 0.9 },
+  { at: 0.74, value: 0.86 }, { at: 0.84, value: 0.78 }, { at: 1, value: 0.94 },
+]
+
+const fogDensityKeys: Keyframe<number>[] = [
+  { at: 0, value: 0.052 }, { at: 0.14, value: 0.042 }, { at: 0.28, value: 0.027 },
+  { at: 0.37, value: 0.038 }, { at: 0.48, value: 0.021 }, { at: 0.74, value: 0.024 },
+  { at: 0.85, value: 0.04 }, { at: 1, value: 0.03 },
 ]
 
 function sampleColorKeyframes(progress: number, keyframes: ColorKeyframe[], target: THREE.Color) {
@@ -152,24 +202,27 @@ export class JourneyWorld {
       this.composer.addPass(new OutputPass())
     }
 
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.2)
-    this.fillLight = new THREE.HemisphereLight(this.fillLightColor, this.groundLightColor, 1.25)
+    this.ambientLight = new THREE.AmbientLight(0xfff5e6, 0.035)
+    this.fillLight = new THREE.HemisphereLight(this.fillLightColor, this.groundLightColor, 0.34)
     this.keyLight = new THREE.DirectionalLight(0xffd58d, 2.25)
     this.keyLight.castShadow = quality.shadows
     this.keyLight.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize)
     this.keyLight.shadow.camera.near = 0.1
     this.keyLight.shadow.camera.far = 30
-    this.keyLight.shadow.camera.left = -10
-    this.keyLight.shadow.camera.right = 10
-    this.keyLight.shadow.camera.top = 10
-    this.keyLight.shadow.camera.bottom = -10
+    this.keyLight.shadow.camera.left = -6
+    this.keyLight.shadow.camera.right = 6
+    this.keyLight.shadow.camera.top = 6
+    this.keyLight.shadow.camera.bottom = -6
     this.keyLight.shadow.normalBias = 0.025
     this.keyLight.shadow.bias = -0.0002
-    this.ovenLight = new THREE.PointLight(PALETTE.ember, 0, 9, 2)
-    this.ovenLight.position.set(-1.1, 0.35, -1.85)
-    this.breadLight = new THREE.PointLight(0xffc17c, 0, 7, 2)
-    this.breadLight.position.set(1.7, 2.1, 3.6)
-    this.scene.add(this.ambientLight, this.fillLight, this.keyLight, this.ovenLight, this.breadLight)
+    this.keyLight.shadow.radius = 2
+    this.keyLight.shadow.blurSamples = 8
+    this.ovenLight = new THREE.PointLight(PALETTE.ember, 0, 6, 2)
+    this.ovenLight.position.set(-0.55, 0.46, -1.1)
+    this.breadLight = new THREE.PointLight(0xffc992, 0, 5.5, 2)
+    this.breadLight.position.set(2.5, 2.15, 1.45)
+    this.keyLight.target.position.set(0, 0.35, 0)
+    this.scene.add(this.ambientLight, this.fillLight, this.keyLight, this.keyLight.target, this.ovenLight, this.breadLight)
 
     this.sequence = createJourneySequence(quality)
     this.root.add(this.sequence.group)
@@ -270,7 +323,10 @@ export class JourneyWorld {
     sampleVectorKeyframes(context.progress, cameraPositionKeys, this.cameraTarget)
     sampleVectorKeyframes(context.progress, cameraLookKeys, this.desiredLook)
     if (context.quality.reducedMotion) {
-      this.cameraTarget.lerp(this.reducedCamera, 0.8)
+      // Keep most chapters calm and wide in reduced-motion mode, but preserve
+      // the authored three-quarter product angle once the final cut settles.
+      const reducedBlend = 0.8 * (1 - windowProgress(context.progress, 0.965, 0.998))
+      this.cameraTarget.lerp(this.reducedCamera, reducedBlend)
     }
     // Preserve the authored horizontal composition in portrait viewports.
     const portraitFit = Math.max(1, 1.22 / this.camera.aspect)
@@ -301,15 +357,25 @@ export class JourneyWorld {
     sampleColorKeyframes(p, keyLightColorKeys, this.keyLightColor)
     this.keyLight.color.copy(this.keyLightColor)
     sampleVectorKeyframes(p, keyLightPositionKeys, this.lightTarget)
+    const proofQuiet = windowProgress(p, 0.68, 0.71) * (1 - windowProgress(p, 0.775, 0.81))
+    if (!context.quality.reducedMotion) {
+      this.lightTarget.x += Math.sin(this.elapsed * 0.12) * proofQuiet * 0.42
+      this.lightTarget.z += Math.cos(this.elapsed * 0.09) * proofQuiet * 0.22
+    }
     this.keyLight.position.copy(this.lightTarget)
+    this.keyLight.target.position.set(0, 0.32 + windowProgress(p, 0.72, 0.86) * 0.35, -windowProgress(p, 0.72, 0.86) * 1.2 + windowProgress(p, 0.9, 1) * 1.65)
 
     const ovenWarmth = windowProgress(p, 0.753, 0.829) * (1 - windowProgress(p, 0.925, 0.98))
     const finishWarmth = windowProgress(p, 0.89, 1)
-    this.ambientLight.intensity = damp(this.ambientLight.intensity, 0.16 + finishWarmth * 0.22, 5, context.delta)
-    this.fillLight.intensity = damp(this.fillLight.intensity, 1.2 + (1 - ovenWarmth) * 0.22, 5, context.delta)
-    this.keyLight.intensity = damp(this.keyLight.intensity, 2.1 + ovenWarmth * 0.52 + finishWarmth * 0.28, 5, context.delta)
-    this.ovenLight.intensity = damp(this.ovenLight.intensity, ovenWarmth * 0.9, 8, context.delta)
-    this.breadLight.intensity = damp(this.breadLight.intensity, finishWarmth * 1.1, 6, context.delta)
+    this.ambientLight.intensity = damp(this.ambientLight.intensity, sampleNumberKeyframes(p, ambientIntensityKeys), 5, context.delta)
+    this.fillLight.intensity = damp(this.fillLight.intensity, sampleNumberKeyframes(p, fillIntensityKeys), 5, context.delta)
+    this.keyLight.intensity = damp(this.keyLight.intensity, sampleNumberKeyframes(p, keyIntensityKeys), 5, context.delta)
+    this.ovenLight.intensity = damp(this.ovenLight.intensity, ovenWarmth * 2.55, 8, context.delta)
+    this.breadLight.intensity = damp(this.breadLight.intensity, finishWarmth * 2.25, 6, context.delta)
+    this.renderer.toneMappingExposure = damp(this.renderer.toneMappingExposure, sampleNumberKeyframes(p, exposureKeys), 4, context.delta)
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.density = damp(this.scene.fog.density, sampleNumberKeyframes(p, fogDensityKeys), 5, context.delta)
+    }
 
     if (this.bloom) {
       this.bloom.strength = 0.045 + ovenWarmth * 0.12 + finishWarmth * 0.035

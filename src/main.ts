@@ -55,12 +55,13 @@ function updateHud(state: JourneyState) {
   introCopy.style.opacity = String(Math.max(0, 1 - state.progress * 14))
   sceneCopy.textContent = sceneCopyByStage[state.stageIndex - 1] ?? ''
   sceneCopy.classList.toggle('is-visible', state.progress > 0.17 && state.progress < 0.93)
-  if (state.progress <= 0.97 && finishCopy.contains(document.activeElement)) {
+  if (state.progress <= 0.996 && finishCopy.contains(document.activeElement)) {
     soundToggle.focus({ preventScroll: true })
   }
-  finishCopy.inert = state.progress <= 0.97
-  finishCopy.classList.toggle('is-visible', state.progress > 0.97)
-  finishCopy.setAttribute('aria-hidden', String(state.progress <= 0.97))
+  finishCopy.inert = state.progress <= 0.996
+  finishCopy.classList.toggle('is-visible', state.progress > 0.996)
+  finishCopy.setAttribute('aria-hidden', String(state.progress <= 0.996))
+  document.documentElement.classList.toggle('hud-on-light', state.progress >= 0.335 && state.progress <= 0.79)
   document.documentElement.style.setProperty('--journey-progress', String(state.progress))
   audio.setProgress(state.progress)
 }
