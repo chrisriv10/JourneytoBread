@@ -51,13 +51,14 @@
     <path d="M905 372C938 385 966 400 987 420L969 454C942 434 916 421 886 411Z"/>
   </g>
 
-  <g stroke="#6A2A10" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M482 356C510 323 549 300 589 290" stroke-width="17"/>
-    <path d="M480 351C509 319 548 296 587 286" stroke="#F2D5A0" stroke-opacity="0.27" stroke-width="3"/>
-    <path d="M649 278C674 306 688 337 691 368" stroke-width="17"/>
-    <path d="M649 273C674 301 687 332 690 363" stroke="#F2D5A0" stroke-opacity="0.24" stroke-width="3"/>
-    <path d="M797 294C841 307 878 330 909 361" stroke-width="18"/>
-    <path d="M799 289C842 302 880 325 911 356" stroke="#F2D5A0" stroke-opacity="0.25" stroke-width="3"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <!-- Three classic parallel scores: dark split, then a warm crumb edge. -->
+    <path d="M472 365C512 331 560 306 611 294" stroke="#4C1B09" stroke-width="23"/>
+    <path d="M470 358C511 326 559 301 609 289" stroke="#F2D5A0" stroke-opacity="0.46" stroke-width="5"/>
+    <path d="M625 359C667 326 714 301 765 292" stroke="#4C1B09" stroke-width="23"/>
+    <path d="M623 352C666 320 713 296 763 287" stroke="#F2D5A0" stroke-opacity="0.46" stroke-width="5"/>
+    <path d="M778 365C820 335 866 312 917 307" stroke="#4C1B09" stroke-width="23"/>
+    <path d="M777 358C820 329 866 306 916 302" stroke="#F2D5A0" stroke-opacity="0.46" stroke-width="5"/>
   </g>
 
   <path d="M639 384C660 369 731 368 758 384C773 393 772 417 755 431C730 449 662 448 640 431C624 418 625 394 639 384Z" fill="url(#crumb)" fill-opacity="0.56"/>

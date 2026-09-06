@@ -38,7 +38,6 @@ if (!experience || !rail || !loader || !fallback || !stageNumber || !stageLabel 
 }
 
 const audio = new AudioManager()
-const quality = getQualityConfig()
 let world: JourneyWorld | null = null
 let controller: JourneyController | null = null
 
@@ -56,8 +55,12 @@ function updateHud(state: JourneyState) {
   introCopy.style.opacity = String(Math.max(0, 1 - state.progress * 14))
   sceneCopy.textContent = sceneCopyByStage[state.stageIndex - 1] ?? ''
   sceneCopy.classList.toggle('is-visible', state.progress > 0.17 && state.progress < 0.93)
-  finishCopy.classList.toggle('is-visible', state.progress > 0.93)
-  finishCopy.setAttribute('aria-hidden', String(state.progress <= 0.93))
+  if (state.progress <= 0.97 && finishCopy.contains(document.activeElement)) {
+    soundToggle.focus({ preventScroll: true })
+  }
+  finishCopy.inert = state.progress <= 0.97
+  finishCopy.classList.toggle('is-visible', state.progress > 0.97)
+  finishCopy.setAttribute('aria-hidden', String(state.progress <= 0.97))
   document.documentElement.style.setProperty('--journey-progress', String(state.progress))
   audio.setProgress(state.progress)
 }
@@ -91,8 +94,9 @@ function setupWebMcp(activeController: JourneyController) {
 }
 
 try {
+  const quality = getQualityConfig()
   world = new JourneyWorld(experience, quality, updateHud)
-  controller = new JourneyController(world, rail, updateHud)
+  controller = new JourneyController(world)
   setupWebMcp(controller)
 
   soundToggle.addEventListener('click', async () => {
@@ -104,8 +108,9 @@ try {
   })
 
   replayButton.addEventListener('click', () => controller?.replay())
-  const previewProgress = Number(new URLSearchParams(window.location.search).get('progress'))
-  if (Number.isFinite(previewProgress) && previewProgress >= 0 && previewProgress <= 1) {
+  const progressParam = new URLSearchParams(window.location.search).get('progress')
+  const previewProgress = Number(progressParam)
+  if (progressParam !== null && Number.isFinite(previewProgress) && previewProgress >= 0 && previewProgress <= 1) {
     window.setTimeout(() => controller?.scrollToProgress(previewProgress), 120)
   }
   window.setTimeout(() => loader.classList.add('is-hidden'), quality.reducedMotion ? 100 : 360)

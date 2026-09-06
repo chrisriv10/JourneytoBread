@@ -10,12 +10,21 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.webgl-fallback .hud { display: none; }
 
 html {
   min-width: 320px;
   background: #0a0d0c;
   scroll-behavior: auto;
 }
+
+html.lenis,
+html.lenis body { height: auto; }
+
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
 
 body {
   margin: 0;
@@ -172,6 +181,7 @@ button {
   left: 50%;
   bottom: 10.5vh;
   opacity: 0;
+  visibility: hidden;
   transform: translate(-50%, 20px);
   text-align: center;
   transition: opacity 420ms ease, transform 420ms cubic-bezier(.2,.75,.25,1);
@@ -179,6 +189,7 @@ button {
 
 .hud__finish.is-visible {
   opacity: 1;
+  visibility: visible;
   transform: translate(-50%, 0);
 }
 

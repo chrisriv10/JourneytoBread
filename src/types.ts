@@ -1,5 +1,3 @@
-import type * as THREE from 'three'
-
 export type JourneyStage =
   | 'wheat'
   | 'grain'
@@ -21,20 +19,15 @@ export type PointerState = {
 export type QualityConfig = {
   mobile: boolean
   reducedMotion: boolean
+  tier: 'high' | 'balanced' | 'mobile'
   dpr: number
   wheatCount: number
   flourCount: number
   crumbCount: number
   bloom: boolean
   shadows: boolean
-}
-
-export type RenderContext = {
-  progress: number
-  time: number
-  delta: number
-  pointer: PointerState
-  quality: QualityConfig
+  shadowMapSize: number
+  anisotropy: number
 }
 
 export type JourneyState = {
@@ -42,17 +35,6 @@ export type JourneyState = {
   stageIndex: number
   stageLabel: string
   remainingSeconds: number
-}
-
-export type JourneyWorldLike = {
-  setProgress(progress: number): JourneyState
-}
-
-export type SceneModule = {
-  id: JourneyStage
-  mount(world: JourneyWorldLike): void
-  apply(localProgress: number, context: RenderContext): void
-  dispose(): void
 }
 
 export type StageDefinition = {
@@ -73,5 +55,3 @@ export const STAGES: StageDefinition[] = [
   { id: 'oven', label: 'OVEN', start: 0.78, end: 0.94 },
   { id: 'bread', label: 'BREAD', start: 0.9, end: 1 },
 ]
-
-export type MeshWithMaterial = THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>
