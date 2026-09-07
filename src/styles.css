@@ -56,7 +56,10 @@ button {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 46%, transparent 48%, rgba(5, 4, 2, 0.12) 76%, rgba(5, 4, 2, 0.32) 115%);
+  background:
+    radial-gradient(ellipse at 52% 38%, rgba(255, 224, 167, 0.045), transparent 42%),
+    linear-gradient(180deg, rgba(8, 13, 10, 0.08), transparent 38%, rgba(28, 15, 7, 0.08) 72%, rgba(4, 3, 2, 0.18)),
+    radial-gradient(ellipse at 50% 46%, transparent 46%, rgba(5, 4, 2, 0.13) 75%, rgba(5, 4, 2, 0.36) 115%);
 }
 
 .journey-canvas {
@@ -112,6 +115,7 @@ button {
   gap: 18px;
   align-items: center;
   opacity: 0.72;
+  will-change: transform, opacity;
 }
 
 .hud__stage-number { color: rgba(245, 237, 220, 0.46); }
@@ -125,6 +129,9 @@ button {
   font-size: 16px;
   letter-spacing: 0.08em;
   transition: color 400ms ease;
+  min-width: 5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .hud__intro {

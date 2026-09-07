@@ -4,6 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import {
+  criticallyDamped,
   damp,
   sampleNumberSplineKeyframes,
   sampleVectorSplineKeyframes,
@@ -22,23 +23,22 @@ type ColorKeyframe = Keyframe<THREE.Color>
 const cameraPositionKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-0.82, 1.1, 5.25) },
   { at: 0.08, value: new THREE.Vector3(-0.54, 1.2, 4.6) },
-  { at: 0.145, value: new THREE.Vector3(0.58, 1.7, 4.22), tension: 0.35 },
+  { at: 0.145, value: new THREE.Vector3(0.48, 1.68, 4.22), tension: 0.3 },
   { at: 0.2, value: new THREE.Vector3(0.78, 1.75, 4.12), tension: 0.62 },
-  { at: 0.245, value: new THREE.Vector3(0.34, 1.67, 4.25) },
-  { at: 0.31, value: new THREE.Vector3(-0.86, 1.43, 4.78) },
-  { at: 0.375, value: new THREE.Vector3(-0.12, 1.7, 4.62) },
-  { at: 0.44, value: new THREE.Vector3(0.62, 2.44, 5.05) },
-  { at: 0.52, value: new THREE.Vector3(0.78, 2.46, 4.72) },
-  { at: 0.61, value: new THREE.Vector3(0.1, 1.9, 4.38) },
-  { at: 0.68, value: new THREE.Vector3(-0.56, 1.74, 4.18) },
-  { at: 0.74, value: new THREE.Vector3(0.38, 2.02, 4.45), tension: 0.82 },
-  { at: 0.8, value: new THREE.Vector3(0.12, 1.88, 4.32) },
-  { at: 0.855, value: new THREE.Vector3(-0.68, 1.45, 4.02) },
-  { at: 0.92, value: new THREE.Vector3(0.14, 1.72, 4.35) },
-  { at: 0.955, value: new THREE.Vector3(0.9, 2, 4.78), tension: 0.28 },
-  { at: 0.98, value: new THREE.Vector3(1.95, 1.7, 5) },
-  { at: 0.99, value: new THREE.Vector3(2.55, 1.62, 4.76) },
-  { at: 1, value: new THREE.Vector3(3.15, 1.58, 4.45) },
+  { at: 0.25, value: new THREE.Vector3(0.24, 1.62, 4.3) },
+  { at: 0.31, value: new THREE.Vector3(-0.68, 1.45, 4.74) },
+  { at: 0.38, value: new THREE.Vector3(-0.08, 1.72, 4.68) },
+  { at: 0.45, value: new THREE.Vector3(0.5, 2.4, 5.02) },
+  { at: 0.53, value: new THREE.Vector3(0.64, 2.4, 4.72) },
+  { at: 0.62, value: new THREE.Vector3(0.06, 1.88, 4.38) },
+  { at: 0.69, value: new THREE.Vector3(-0.38, 1.78, 4.22) },
+  { at: 0.74, value: new THREE.Vector3(0.18, 2, 4.42), tension: 0.84 },
+  { at: 0.81, value: new THREE.Vector3(0.04, 1.84, 4.28) },
+  { at: 0.86, value: new THREE.Vector3(-0.5, 1.48, 4.04) },
+  { at: 0.92, value: new THREE.Vector3(0.08, 1.68, 4.34) },
+  { at: 0.955, value: new THREE.Vector3(0.66, 1.92, 4.7), tension: 0.22 },
+  { at: 0.98, value: new THREE.Vector3(1.72, 1.72, 4.96) },
+  { at: 1, value: new THREE.Vector3(2.9, 1.58, 4.5) },
 ]
 
 const cameraLookKeys: SplineKeyframe<THREE.Vector3>[] = [
@@ -95,7 +95,8 @@ const keyLightColorKeys: ColorKeyframe[] = [
   { at: 0.3, value: new THREE.Color(0xe7c891) },
   { at: 0.5, value: new THREE.Color(0xffe0ad) },
   { at: 0.74, value: new THREE.Color(0xf1c783) },
-  { at: 0.84, value: new THREE.Color(0xff8a43) },
+  { at: 0.82, value: new THREE.Color(0xf6c184) },
+  { at: 0.865, value: new THREE.Color(0xff8840) },
   { at: 1, value: new THREE.Color(0xffc17d) },
 ]
 
@@ -178,6 +179,8 @@ export class JourneyWorld {
   private readonly breadLight: THREE.PointLight
   private readonly ambientLight: THREE.AmbientLight
   private progress = 0
+  private visualProgress = 0
+  private visualVelocity = 0
   private elapsed = 0
   private animationFrame = 0
   private composer: EffectComposer | null = null
@@ -262,6 +265,10 @@ export class JourneyWorld {
     }
   }
 
+  getMotionState() {
+    return { targetProgress: this.progress, visualProgress: this.visualProgress, visualVelocity: this.visualVelocity }
+  }
+
   setProgress(progress: number) {
     this.progress = THREE.MathUtils.clamp(progress, 0, 1)
     const state = this.getState()
@@ -310,8 +317,31 @@ export class JourneyWorld {
     this.pointer.x = damp(this.pointer.x, this.pointer.targetX, pointerLambda, delta)
     this.pointer.y = damp(this.pointer.y, this.pointer.targetY, pointerLambda, delta)
 
+    const distance = Math.abs(this.progress - this.visualProgress)
+    if (this.quality.reducedMotion) {
+      this.visualProgress = this.progress
+      this.visualVelocity = 0
+    } else {
+      const baseTime = this.quality.mobile ? 0.068 : 0.088
+      const catchupTime = this.quality.mobile ? 0.046 : 0.054
+      const urgency = THREE.MathUtils.smoothstep(distance, 0.015, 0.2)
+      const result = criticallyDamped(
+        this.visualProgress,
+        this.progress,
+        this.visualVelocity,
+        THREE.MathUtils.lerp(baseTime, catchupTime, urgency),
+        delta,
+      )
+      this.visualProgress = THREE.MathUtils.clamp(result.value, 0, 1)
+      this.visualVelocity = result.velocity
+      if (distance < 0.00001 && Math.abs(this.visualVelocity) < 0.0001) {
+        this.visualProgress = this.progress
+        this.visualVelocity = 0
+      }
+    }
+
     const context: SequenceContext = {
-      progress: this.progress,
+      progress: this.visualProgress,
       time: this.elapsed,
       delta,
       pointer: this.pointer,
@@ -382,11 +412,15 @@ export class JourneyWorld {
     this.keyLight.target.position.set(0, 0.32 + windowProgress(p, 0.72, 0.86) * 0.35, -windowProgress(p, 0.72, 0.86) * 1.2 + windowProgress(p, 0.9, 1) * 1.65)
 
     const ovenWarmth = windowProgress(p, 0.753, 0.829) * (1 - windowProgress(p, 0.925, 0.98))
+    const ovenHeat = windowProgress(p, 0.813, 0.86)
     const finishWarmth = windowProgress(p, 0.89, 1)
     this.ambientLight.intensity = sampleNumberSplineKeyframes(p, ambientIntensityKeys)
     this.fillLight.intensity = sampleNumberSplineKeyframes(p, fillIntensityKeys)
     this.keyLight.intensity = sampleNumberSplineKeyframes(p, keyIntensityKeys)
-    this.ovenLight.intensity = ovenWarmth * 2.55
+    // The opening glows while it approaches, but the strong ember practical
+    // arrives only as the dough crosses the threshold. This preserves the pale
+    // proofed material long enough for the physical handoff to read.
+    this.ovenLight.intensity = ovenWarmth * (0.82 + ovenHeat * 1.78)
     this.breadLight.intensity = finishWarmth * 2.25
     this.renderer.toneMappingExposure = sampleNumberSplineKeyframes(p, exposureKeys)
     if (this.scene.fog instanceof THREE.FogExp2) {

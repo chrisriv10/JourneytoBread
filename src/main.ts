@@ -40,6 +40,8 @@ if (!experience || !rail || !loader || !fallback || !stageNumber || !stageLabel 
 const audio = new AudioManager()
 let world: JourneyWorld | null = null
 let controller: JourneyController | null = null
+let previousStageIndex = 1
+let stageAnimation: Animation | null = null
 
 function formatTime(totalSeconds: number) {
   const seconds = Math.max(0, Math.round(totalSeconds))
@@ -50,6 +52,14 @@ function updateHud(state: JourneyState) {
   const sceneCopyByStage = ['WHEAT', 'ONE GRAIN.', 'BREAKING IT DOWN.', 'FLOUR.', 'FLOUR. WATER. SALT. TIME.', 'MAKE IT SOFT.', 'WAIT.', 'HEAT.', '']
   stageNumber.textContent = `${String(state.stageIndex).padStart(2, '0')} / 09`
   stageLabel.textContent = state.stageLabel
+  if (state.stageIndex !== previousStageIndex && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    stageAnimation?.cancel()
+    stageAnimation = document.querySelector<HTMLElement>('.hud__stage')?.animate([
+      { opacity: 0.34, transform: 'translateY(-3px)' },
+      { opacity: 0.72, transform: 'translateY(0)' },
+    ], { duration: 220, easing: 'cubic-bezier(.2,.75,.25,1)' }) ?? null
+  }
+  previousStageIndex = state.stageIndex
   timer.textContent = formatTime(state.remainingSeconds)
   timer.setAttribute('aria-label', `${formatTime(state.remainingSeconds)} remaining in the journey`)
   introCopy.style.opacity = String(Math.max(0, 1 - state.progress * 14))
@@ -98,6 +108,9 @@ try {
   const quality = getQualityConfig()
   world = new JourneyWorld(experience, quality, updateHud)
   controller = new JourneyController(world)
+  if (import.meta.env.DEV) {
+    ;(window as Window & { __journeyDebug?: () => ReturnType<JourneyWorld['getMotionState']> }).__journeyDebug = () => world!.getMotionState()
+  }
   setupWebMcp(controller)
 
   soundToggle.addEventListener('click', async () => {
@@ -128,4 +141,5 @@ window.addEventListener('beforeunload', () => {
   controller?.destroy()
   world?.destroy()
   audio.disable()
+  delete (window as Window & { __journeyDebug?: () => unknown }).__journeyDebug
 }, { once: true })

@@ -50,6 +50,28 @@ export function dampVector(current: THREE.Vector3, target: THREE.Vector3, lambda
   return current
 }
 
+export type DampedValue = { value: number; velocity: number }
+
+// Exact critically damped spring integration for a target held constant during
+// this frame. Unlike a fixed lerp, this has the same response at any frame rate
+// and preserves velocity when the user reverses direction mid-transition.
+export function criticallyDamped(
+  current: number,
+  target: number,
+  velocity: number,
+  smoothTime: number,
+  delta: number,
+): DampedValue {
+  const step = Math.max(0, Math.min(delta, 0.05))
+  const omega = 2 / Math.max(0.001, smoothTime)
+  const displacement = current - target
+  const coefficient = velocity + omega * displacement
+  const decay = Math.exp(-omega * step)
+  const value = target + (displacement + coefficient * step) * decay
+  const nextVelocity = (velocity - omega * coefficient * step) * decay
+  return { value, velocity: nextVelocity }
+}
+
 export function sampleNumberKeyframes(progress: number, keyframes: Keyframe<number>[]) {
   const p = clamp01(progress)
   if (p <= keyframes[0].at) return keyframes[0].value
@@ -88,6 +110,30 @@ function splineTangent<T>(keyframes: SplineKeyframe<T>[], index: number, valueAt
   return ((valueAt(next.value) - valueAt(previous.value)) / Math.max(next.at - previous.at, 0.0001)) * (1 - tension)
 }
 
+function monotoneScalarTangent(keyframes: SplineKeyframe<number>[], index: number) {
+  const current = keyframes[index]
+  const tension = THREE.MathUtils.clamp(current.tension ?? 0, 0, 1)
+  if (index === 0) {
+    const next = keyframes[1]
+    return ((next.value - current.value) / Math.max(next.at - current.at, 0.0001)) * (1 - tension)
+  }
+  if (index === keyframes.length - 1) {
+    const previous = keyframes[index - 1]
+    return ((current.value - previous.value) / Math.max(current.at - previous.at, 0.0001)) * (1 - tension)
+  }
+  const previous = keyframes[index - 1]
+  const next = keyframes[index + 1]
+  const previousSpan = Math.max(current.at - previous.at, 0.0001)
+  const nextSpan = Math.max(next.at - current.at, 0.0001)
+  const previousSlope = (current.value - previous.value) / previousSpan
+  const nextSlope = (next.value - current.value) / nextSpan
+  if (previousSlope === 0 || nextSlope === 0 || Math.sign(previousSlope) !== Math.sign(nextSlope)) return 0
+  const weightPrevious = 2 * nextSpan + previousSpan
+  const weightNext = nextSpan + 2 * previousSpan
+  const harmonic = (weightPrevious + weightNext) / (weightPrevious / previousSlope + weightNext / nextSlope)
+  return harmonic * (1 - tension)
+}
+
 function hermite(value0: number, value1: number, tangent0: number, tangent1: number, span: number, local: number) {
   const local2 = local * local
   const local3 = local2 * local
@@ -110,14 +156,15 @@ export function sampleNumberSplineKeyframes(progress: number, keyframes: SplineK
     if (p <= current.at) {
       const span = Math.max(current.at - previous.at, 0.0001)
       const local = THREE.MathUtils.clamp((p - previous.at) / span, 0, 1)
-      return hermite(
+      const sampled = hermite(
         previous.value,
         current.value,
-        splineTangent(keyframes, index - 1, (value) => value),
-        splineTangent(keyframes, index, (value) => value),
+        monotoneScalarTangent(keyframes, index - 1),
+        monotoneScalarTangent(keyframes, index),
         span,
         local,
       )
+      return THREE.MathUtils.clamp(sampled, Math.min(previous.value, current.value), Math.max(previous.value, current.value))
     }
   }
   return keyframes[keyframes.length - 1].value

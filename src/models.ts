@@ -28,6 +28,11 @@ export type JourneySequence = {
 
 const temp = new T.Vector3()
 const temp2 = new T.Vector3()
+const SCORE_SPECS = [
+  { center: -0.6, width: 0.92, depth: 1.03 },
+  { center: -0.01, width: 1.08, depth: 1.12 },
+  { center: 0.58, width: 0.86, depth: 0.96 },
+] as const
 
 function createRandom(initial: number) {
   let seed = initial
@@ -181,7 +186,7 @@ function roundBox(width: number, depth: number, height: number, radius = 0.14) {
 }
 
 function board(parent: T.Object3D, quality: QualityConfig, width = 3.9, depth = 2.7, color: T.ColorRepresentation = 0xc08a55) {
-  const object = mesh(roundBox(width, depth, 0.13), mat(color, quality, undefined, { roughness: 0.84 }), parent, 0, -0.16, 0)
+  const object = mesh(roundBox(width, depth, 0.13), mat(color, quality, 'wood', { roughness: 0.86, bumpScale: 0.012 }), parent, 0, -0.16, 0)
   object.name = 'wood-work-surface'
   const grainRandom = createRandom(Math.round(width * depth * 977))
   const grainColor = new T.Color(color).multiplyScalar(0.48)
@@ -278,18 +283,27 @@ class DoughMorph {
   private readonly color = new T.Color()
   private readonly pale = new T.Color(PALETTE.flour)
   private readonly wet = new T.Color(0xd8ae72)
+  private readonly proofed = new T.Color(0xe5bb78)
   private readonly crust = new T.Color(0xb96222)
   private readonly toasted = new T.Color(0x5d240f)
   private readonly cut = new T.Color(0xf0c887)
   private readonly raised = new T.Color(0xf2b85d)
 
   constructor(parent: T.Object3D, quality: QualityConfig) {
-    const geometry = new T.SphereGeometry(1, quality.mobile ? 96 : 144, quality.mobile ? 48 : 72)
+    const widthSegments = quality.mobile ? 72 : quality.tier === 'high' ? 128 : 96
+    const heightSegments = quality.mobile ? 36 : quality.tier === 'high' ? 64 : 48
+    const geometry = new T.SphereGeometry(1, widthSegments, heightSegments)
     this.position = geometry.attributes.position as T.BufferAttribute
     this.original = new Float32Array(this.position.array)
     this.colors = new T.BufferAttribute(new Float32Array(this.position.count * 3), 3)
     geometry.setAttribute('color', this.colors)
-    this.mesh = mesh(geometry, mat(0xffffff, quality, 'flour', { vertexColors: true, roughness: 0.96 }), parent)
+    this.mesh = mesh(geometry, mat(0xffffff, quality, 'flour', {
+      vertexColors: true,
+      roughness: 0.96,
+      metalness: 0,
+      emissive: 0x251207,
+      emissiveIntensity: 0.035,
+    }), parent)
     this.mesh.name = 'hero-dough-loaf'
     this.mesh.frustumCulled = false
   }
@@ -308,9 +322,9 @@ class DoughMorph {
     // Stop just shy of a mathematically flat collapse; the crumb face covers the
     // remaining cap while avoiding degenerate triangles in the persistent loaf.
     const sliceCut = windowProgress(p, 0.989, 0.997) * 0.9
-    const width = 0.8 + mixing * 0.12 + shaping * 0.18 + proof * 0.18 + spring * 0.12
-    const height = 0.08 + mixing * 0.57 + proof * 0.2 + spring * 0.11
-    const depth = 0.69 + mixing * 0.05 + proof * 0.07
+    const width = 0.8 + mixing * 0.12 + shaping * 0.2 + proof * 0.18 + spring * 0.14
+    const height = 0.08 + mixing * 0.56 + proof * 0.2 + spring * 0.12
+    const depth = 0.69 + mixing * 0.045 + proof * 0.06 - baking * 0.018
     const stirAngle = windowProgress(p, 0.492, 0.565, (t) => t) * Math.PI * 5
     for (let i = 0; i < this.position.count; i += 1) {
       const x = this.original[i * 3]
@@ -320,54 +334,60 @@ class DoughMorph {
       const crownAmount = clamp01((y + 0.12) / 1.12)
       const foot = Math.max(0, (y + 0.64) / 1.64)
       const localPress = Math.exp(-Math.pow((x - Math.sin(knead * Math.PI * 3) * 0.4) / 0.42, 2)) * pressure
-      const wetFold = Math.sin(x * 7.5 + z * 5.5 - stirAngle) * crown * mixing * (1 - mixing) * 0.17
-      const kneadFold = Math.sin(x * 6.5 + knead * 8) * localPress * crown * 0.075
+      const wetFold = Math.sin(x * 7.5 + z * 5.5 - stirAngle) * crown * mixing * (1 - mixing) * 0.125
+      const kneadFold = Math.sin(x * 6.5 + knead * 8) * localPress * crown * 0.06
       const foldAxis = x + z * 0.32 - T.MathUtils.lerp(-0.3, 0.26, knead)
       const foldRidge = (
         Math.exp(-Math.pow((foldAxis + 0.16) / 0.22, 2)) * 0.09
         - Math.exp(-Math.pow(foldAxis / 0.105, 2)) * 0.055
       ) * crown * bell(knead)
-      const wetEdge = Math.sin(x * 4.3 + z * 7.1) * mixing * (1 - mixing) * 0.055
+      const wetEdge = Math.sin(x * 4.3 + z * 7.1) * mixing * (1 - mixing) * 0.038
       const endTaper = 1 - (proof * 0.035 + spring * 0.12) * Math.pow(Math.abs(x), 1.55)
       const asymmetry = 1 + proof * (0.052 * Math.sin(x * 2.2 + z * 2.7) + x * 0.028 - z * 0.018)
       const proofCrown = proof * crown * (0.024 * Math.sin(x * 3.1 - z * 2.4) + 0.018 * x)
-      let py = foot * height * asymmetry * endTaper - localPress * crown * 0.2 + wetFold + kneadFold + foldRidge + proofCrown
-      let px = x * width * (1 + pressure * 0.17) + wetEdge * (0.4 + crown) + shaping * Math.sin(z * 3.2 + y) * 0.018
+      const handmadeCrown = baking * crown * (Math.sin(x * 2.7 + z * 3.6) * 0.012 + x * 0.008 - z * 0.006)
+      let py = foot * height * asymmetry * endTaper - localPress * crown * 0.16 + wetFold + kneadFold + foldRidge + proofCrown + handmadeCrown
+      let px = x * width * (1 + pressure * 0.12) + wetEdge * (0.4 + crown) + shaping * Math.sin(z * 3.2 + y) * 0.018
       const pz = z * depth * endTaper * (1 - pressure * 0.09) + wetEdge * 0.42
       if (px > 0.72) px = T.MathUtils.lerp(px, 0.72, sliceCut)
       const cutLine = px + pz * 0.42
       let groove = 0
       let scoreCore = 0
       let scoreEdge = 0
-      for (const center of [-0.59, 0, 0.59]) {
-        const scoreWidth = 0.014 + spring * 0.035
-        const distance = Math.abs(cutLine - center)
+      for (const score of SCORE_SPECS) {
+        const scoreWidth = (0.014 + spring * 0.038) * score.width
+        const distance = Math.abs(cutLine - score.center)
         groove = Math.max(groove, Math.exp(-Math.pow(distance / scoreWidth, 2)))
-        scoreCore = Math.max(scoreCore, Math.exp(-Math.pow(distance / (scoreWidth * 0.38), 2)))
+        scoreCore = Math.max(scoreCore, Math.exp(-Math.pow(distance / (scoreWidth * 0.34), 2)) * score.depth)
         scoreEdge = Math.max(scoreEdge, Math.exp(-Math.pow((distance - scoreWidth * 1.05) / (scoreWidth * 0.48), 2)))
       }
       const cutMask = windowProgress(y, 0.28, 0.66) * (1 - windowProgress(Math.abs(z), 0.57, 0.88))
       groove *= cutMask * scoring
       scoreCore *= cutMask * scoring
       scoreEdge *= cutMask * scoring
-      py -= groove * (0.022 + spring * 0.055)
+      py -= groove * (0.024 + spring * 0.066)
       const irregular = Math.sin(px * 21 + pz * 13) * Math.sin(pz * 31 - px * 9)
       py += crown * baking * irregular * 0.009
       this.position.setXYZ(i, px, Math.max(0, py), pz)
 
       this.color.copy(this.pale).lerp(this.wet, mixing * (0.72 - shaping * 0.25))
-      const bakeVariation = clamp01(0.57 + crownAmount * 0.3 + x * 0.065 - z * 0.11 + irregular * 0.12)
+      // Once shaped, return the dough toward a dry, warm ivory before heat
+      // starts coloring it. This keeps the basket-to-oven handoff legible.
+      this.color.lerp(this.proofed, shaping * 0.52 + proof * 0.2)
+      const bakeVariation = clamp01(0.52 + crownAmount * 0.34 + x * 0.065 - z * 0.12 + irregular * 0.15)
       this.color.lerp(this.crust, baking * bakeVariation)
       const toastMottle = Math.max(0, Math.sin(px * 8.5 - pz * 5.2) * Math.cos(pz * 10.5 + px * 2.7))
       this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.68 + Math.max(0, z) * 0.11 + scoreCore * 0.34 + toastMottle * crownAmount * 0.08))
-      this.color.lerp(this.cut, groove * baking * 0.8)
-      this.color.lerp(this.raised, scoreEdge * baking * 0.72)
+      this.color.lerp(this.cut, groove * baking * 0.86)
+      this.color.lerp(this.raised, scoreEdge * baking * 0.82)
       const flour = Math.max(0, Math.sin(px * 12 + pz * 7) * Math.sin(pz * 18 - px * 3.5) - 0.34)
-      this.color.lerp(this.pale, flour * crownAmount * baking * (1 - groove) * 0.32)
+      this.color.lerp(this.pale, flour * crownAmount * baking * (1 - groove) * 0.4)
       this.colors.setXYZ(i, this.color.r, this.color.g, this.color.b)
     }
-    this.mesh.material.roughness = 0.95 - mixing * 0.22 + shaping * 0.14 + proof * 0.04 + baking * 0.06
-    this.mesh.material.bumpScale = 0.006 + baking * 0.025
+    const wetness = mixing * (1 - shaping)
+    this.mesh.material.roughness = Math.min(0.99, 0.96 - wetness * 0.34 + shaping * 0.13 + proof * 0.03 + baking * 0.09)
+    this.mesh.material.bumpScale = 0.006 + baking * 0.031
+    this.mesh.material.emissiveIntensity = 0.025 + baking * 0.018
     this.position.needsUpdate = this.colors.needsUpdate = true
     this.mesh.geometry.computeVertexNormals()
   }
@@ -452,7 +472,7 @@ class FlourSystem {
     for (let i = 0; i < hazeCount; i += 1) {
       const material = new T.SpriteMaterial({
         map: hazeTexture,
-        color: 0xf5ead2,
+        color: new T.Color().setHSL(0.105 + i * 0.0025, 0.3, 0.88 + (i % 3) * 0.025),
         transparent: true,
         opacity: 0,
         depthWrite: false,
@@ -503,17 +523,18 @@ class FlourSystem {
       const nearPass = Math.pow(entry.near, 1.6)
       const isVeil = index < veilCount
       const opacity = isVeil
-        ? Math.max(hazePresence * (0.2 + nearPass * 0.22), transitionVeil * (0.54 + nearPass * 0.2))
-        : hazePresence * (0.24 + nearPass * 0.34)
+        ? Math.max(hazePresence * (0.18 + nearPass * 0.2), transitionVeil * (0.42 + nearPass * 0.18))
+        : hazePresence * (0.22 + nearPass * 0.32)
       entry.sprite.visible = opacity > 0.003
       entry.material.opacity = opacity
       entry.sprite.position.set(
-        T.MathUtils.lerp(-0.35, bowlTarget.x, transfer) + Math.sin(entry.phase + transfer * 3) * 0.78,
-        0.42 + nearPass * 0.88 - transfer * (0.08 + nearPass * 0.24) + Math.cos(entry.phase + time * 0.18) * 0.11,
+        T.MathUtils.lerp(-0.35, bowlTarget.x, transfer) + Math.sin(entry.phase + transfer * 3 + time * 0.08) * (0.56 + nearPass * 0.28),
+        0.42 + nearPass * 0.88 - transfer * (0.08 + nearPass * 0.24) + Math.cos(entry.phase + time * (0.14 + nearPass * 0.08)) * 0.13,
         1.8 + nearPass * 2.1 + Math.sin(index * 1.7) * 0.16,
       )
       const scale = entry.scale * (1.2 + nearPass * 1.5) * (1 + hazePresence * 0.55)
-      entry.sprite.scale.set(scale, scale * 0.68, 1)
+      entry.sprite.scale.set(scale, scale * (0.58 + (index % 3) * 0.08), 1)
+      entry.material.rotation = entry.phase * 0.18 + time * (index % 2 === 0 ? 0.018 : -0.013)
     })
     this.particles.forEach((particle, i) => {
       const flow = clamp01((emitted - particle.delay * 0.72) / 0.28)
@@ -531,7 +552,7 @@ class FlourSystem {
         temp.z += foregroundPass * (1.2 + particle.near * 1.55)
         temp.y += foregroundPass * (0.1 + particle.weight * 0.55)
         temp.x += Math.sin(particle.phase) * foregroundPass * 0.46
-        alpha = pour > 0 && pour < 1 ? 0.22 + particle.weight * 0.42 + foregroundPass * 0.13 : 0
+        alpha = pour > 0 && pour < 1 ? 0.22 + particle.weight * 0.42 + foregroundPass * 0.22 : 0
       }
       const drift = Math.sin(time * (0.34 + particle.near * 0.32) + particle.phase) * (0.008 + particle.near * 0.022) * alpha
       this.positions.setXYZ(i, temp.x + drift, temp.y + Math.cos(time * 0.28 + particle.phase) * drift * 0.6, temp.z + drift)
@@ -688,9 +709,14 @@ function grainKernel(quality: QualityConfig, scale = 1) {
     positions.setXYZ(i, x * shoulder * rib + (1 - y * y) * 0.024, y, z * 0.69 * (1 - y * 0.045) * rib)
   }
   geometry.computeVertexNormals()
-  const seed = mesh(geometry, mat(0xe0ad4d, quality, undefined, { roughness: 0.88 }), group)
+  const seed = mesh(geometry, mat(0xe0ad4d, quality, 'crust', {
+    roughness: 0.78,
+    bumpScale: 0.012,
+    emissive: 0x351a05,
+    emissiveIntensity: 0.075,
+  }), group)
   seed.scale.setScalar(scale)
-  const crease = tube([new T.Vector3(0.018, -0.45, 0.18), new T.Vector3(-0.006, -0.18, 0.218), new T.Vector3(0.012, 0.16, 0.213), new T.Vector3(-0.005, 0.44, 0.176)], 0.013, mat(0x755022, quality, undefined, { roughness: 0.96 }), group)
+  const crease = tube([new T.Vector3(0.018, -0.45, 0.18), new T.Vector3(-0.006, -0.18, 0.218), new T.Vector3(0.012, 0.16, 0.213), new T.Vector3(-0.005, 0.44, 0.176)], 0.015, mat(0x624019, quality, undefined, { roughness: 0.98 }), group)
   crease.scale.setScalar(scale)
   const creaseEdge = tube([new T.Vector3(0.04, -0.41, 0.19), new T.Vector3(0.022, -0.12, 0.227), new T.Vector3(0.035, 0.2, 0.22), new T.Vector3(0.018, 0.4, 0.185)], 0.004, mat(0xf5cf78, quality, undefined, { roughness: 0.82 }), group)
   creaseEdge.scale.setScalar(scale)
@@ -708,9 +734,11 @@ function mill(quality: QualityConfig) {
   group.add(rotor)
   mesh(irregularCylinderGeometry(1.19, 1.25, 0.38, 48, 31), stone, group, 0, 0.2, 0)
   mesh(irregularCylinderGeometry(1.16, 1.2, 0.44, 48, 79), stone, rotor)
+  ring(1.12, 0.042, mat(0x4e4d47, quality, 'stone', { roughness: 0.99 }), group, 0.025)
   ring(1.205, 0.028, stoneEdge, group, 0.37)
   ring(1.18, 0.025, stoneEdge, rotor, -0.2)
   ring(1.16, 0.014, iron, rotor, 0.2)
+  ring(0.19, 0.026, iron, rotor, 0.225)
   for (let i = 0; i < 14; i += 1) {
     const angle = (i / 14) * Math.PI * 2
     const turn = angle + 0.2 + Math.sin(i * 1.7) * 0.035
@@ -729,19 +757,20 @@ function mill(quality: QualityConfig) {
   mesh(roundBox(0.42, 0.84, 0.065, 0.045), mat(0x936039, quality, 'wood'), group, outlet.x, outlet.y, outlet.z).rotation.x = 0.2
   const shadow = contactShadow(group, 2.85, 2.45)
   shadow.scale.set(1.08, 1, 1)
+  shadow.material.opacity = 0.82
   return { group, rotor, outlet }
 }
 
 function bowl(quality: QualityConfig) {
   const group = new T.Group()
   const profile = [[0.48, -0.42], [0.82, -0.36], [1.16, -0.14], [1.3, 0.18], [1.25, 0.4], [1.08, 0.52], [0.96, 0.48], [1.0, 0.28], [0.9, 0.02], [0.72, -0.18], [0.44, -0.27]]
-  const shell = mesh(new T.LatheGeometry(profile.map(([radius, y]) => new T.Vector2(radius, y)), 48), mat(0xd4d0c2, quality, undefined, { roughness: 0.34 }), group)
+  const shell = mesh(new T.LatheGeometry(profile.map(([radius, y]) => new T.Vector2(radius, y)), 48), mat(0xd8d1c0, quality, undefined, { roughness: 0.29, emissive: 0x17120b, emissiveIntensity: 0.025 }), group)
   shell.scale.z = 0.96
-  const interior = mesh(new T.CircleGeometry(0.455, 40), mat(0xbab5aa, quality, undefined, { roughness: 0.5 }), group, 0, -0.265, 0)
+  const interior = mesh(new T.CircleGeometry(0.455, 40), mat(0xaaa69d, quality, undefined, { roughness: 0.58 }), group, 0, -0.265, 0)
   interior.rotation.x = -Math.PI / 2
   const flourSurface = mesh(new T.CircleGeometry(0.94, 32), mat(PALETTE.flour, quality, 'flour', { roughness: 1 }), group, 0, 0.39, 0)
   flourSurface.rotation.x = -Math.PI / 2
-  const rim = ring(1.14, 0.042, mat(0xeee8d9, quality, undefined, { roughness: 0.27 }), group, 0.48)
+  const rim = ring(1.14, 0.042, mat(0xf4ead6, quality, undefined, { roughness: 0.22, emissive: 0x2b2012, emissiveIntensity: 0.045 }), group, 0.48)
   rim.scale.set(1, 0.98, 1)
   ring(0.48, 0.035, mat(0xaaa598, quality, undefined, { roughness: 0.62 }), group, -0.4)
   return { group, flourSurface }
@@ -774,15 +803,16 @@ function jug(quality: QualityConfig) {
 function proofBasket(quality: QualityConfig) {
   const group = new T.Group()
   const wicker = [0xc69a60, 0xb98650, 0xd0aa71].map((color) => mat(color, quality, 'wood', { roughness: 0.92 }))
-  for (let i = 0; i < 13; i += 1) {
-    const strand = ring(0.77 + i * 0.024 + Math.sin(i * 1.7) * 0.006, 0.027 + (i % 3) * 0.002, wicker[i % wicker.length], group, 0.05 + i * 0.035)
+  for (let i = 0; i < 12; i += 1) {
+    const strand = ring(0.77 + i * 0.022 + Math.sin(i * 1.7) * 0.006, 0.027 + (i % 3) * 0.002, wicker[i % wicker.length], group, 0.05 + i * 0.031)
     strand.position.x = Math.sin(i * 2.3) * 0.005
     strand.rotation.z = Math.sin(i * 1.2) * 0.004
   }
   const rodMaterials = [mat(0x815631, quality, 'wood', { roughness: 0.95 }), mat(0x9a6b3f, quality, 'wood', { roughness: 0.95 })]
-  for (let i = 0; i < 32; i += 1) {
-    const angle = (i / 32) * Math.PI * 2
-    rod(new T.Vector3(Math.cos(angle) * 0.79, 0.055, Math.sin(angle) * 0.79), new T.Vector3(Math.cos(angle) * (1.056 + Math.sin(i) * 0.008), 0.48, Math.sin(angle) * (1.056 + Math.sin(i) * 0.008)), 0.009, rodMaterials[i % 2], group)
+  for (let i = 0; i < 28; i += 1) {
+    const angle = (i / 28) * Math.PI * 2
+    const topRadius = 0.995 + Math.sin(i * 1.31) * 0.008
+    rod(new T.Vector3(Math.cos(angle) * 0.79, 0.055, Math.sin(angle) * 0.79), new T.Vector3(Math.cos(angle) * topRadius, 0.405, Math.sin(angle) * topRadius), 0.0095, rodMaterials[i % 2], group)
   }
   return group
 }
@@ -797,6 +827,11 @@ function oven(quality: QualityConfig) {
   mesh(new T.BoxGeometry(0.16, 1.18, 1.5), dark, group, -1.12, 0.59, -0.28)
   mesh(new T.BoxGeometry(0.16, 1.18, 1.5), dark, group, 1.12, 0.59, -0.28)
   mesh(new T.BoxGeometry(2.25, 0.12, 1.5), dark, group, 0, 1.18, -0.28)
+  const innerLining = mat(0x2c1711, quality, 'stone', { roughness: 0.98 })
+  const innerArch = mesh(new T.TorusGeometry(1.18, 0.095, 8, 42, Math.PI), innerLining, group, 0, 1.17, 0.57)
+  innerArch.rotation.z = 0
+  mesh(new T.BoxGeometry(0.19, 1.17, 0.26), innerLining, group, -1.18, 0.59, 0.57)
+  mesh(new T.BoxGeometry(0.19, 1.17, 0.26), innerLining, group, 1.18, 0.59, 0.57)
   mesh(new T.BoxGeometry(0.55, 1.2, 1.55), mortar, group, -1.47, 0.6, -0.12)
   mesh(new T.BoxGeometry(0.55, 1.2, 1.55), mortar, group, 1.47, 0.6, -0.12)
   for (const side of [-1, 1]) for (let row = 0; row < 4; row += 1) {
@@ -814,8 +849,11 @@ function oven(quality: QualityConfig) {
     wedge.closePath()
     mesh(new T.ExtrudeGeometry(wedge, { depth: 1.5, bevelEnabled: true, bevelSegments: 1, bevelSize: 0.012, bevelThickness: 0.012 }), bricks[i % bricks.length], group, 0, 0, -0.86)
   }
-  const floorMaterial = mat(0x655447, quality, 'stone', { roughness: 0.98 })
-  for (let i = 0; i < 5; i += 1) mesh(new T.BoxGeometry(0.48, 0.11, 1.45), floorMaterial, group, -0.98 + i * 0.49, 0.04, 0.01)
+  const floorMaterials = [0x655447, 0x59493e, 0x746054].map((color) => mat(color, quality, 'stone', { roughness: 0.98 }))
+  for (let i = 0; i < 5; i += 1) {
+    const slab = mesh(new T.BoxGeometry(0.47, 0.11, 1.45), floorMaterials[i % floorMaterials.length], group, -0.98 + i * 0.49, 0.04, 0.01)
+    slab.position.y += Math.sin(i * 2.1) * 0.008
+  }
   const glowCanvas = document.createElement('canvas')
   glowCanvas.width = 256
   glowCanvas.height = 128
@@ -904,13 +942,26 @@ function breadCutDetails(quality: QualityConfig) {
   slice.position.set(0.88, 0.43, 0)
   group.add(slice)
 
-  const porePositions = [[0.31, -0.14], [0.52, 0.08], [0.41, 0.21], [0.57, -0.24], [0.27, 0.18], [0.46, -0.02], [0.2, -0.2]]
+  const crumbShadeMaterial = new T.MeshBasicMaterial({ color: 0xd59d59, transparent: true, opacity: 0.14, side: T.DoubleSide, depthWrite: false })
+  const mainShadePatches = [[0.38, -0.17, 0.085], [0.19, 0.12, 0.055], [0.55, 0.2, 0.07]]
+  mainShadePatches.forEach(([y, z, radius], index) => {
+    const patch = mesh(new T.CircleGeometry(radius, 12), crumbShadeMaterial, group, 0.825, y, z)
+    patch.rotation.y = Math.PI / 2
+    patch.scale.y = 0.62 + index * 0.12
+  })
+  const porePositions = [[0.31, -0.14], [0.52, 0.08], [0.41, 0.21], [0.57, -0.24], [0.27, 0.18], [0.46, -0.02], [0.2, -0.2], [0.62, -0.08], [0.34, 0.04]]
   porePositions.forEach(([y, z], index) => {
     const pore = mesh(new T.CircleGeometry(0.014 + (index % 3) * 0.005, 8), poreMaterial, group, 0.824, y, z)
     pore.rotation.y = Math.PI / 2
     pore.scale.y = 0.72 + (index % 2) * 0.18
   })
-  const slicePores = [[-0.12, -0.16], [0.1, 0.09], [0.23, -0.04], [-0.02, 0.22], [0.27, 0.2], [-0.2, 0.12]]
+  const sliceShadePatches = [[-0.04, -0.12, 0.075], [0.18, 0.15, 0.058]]
+  sliceShadePatches.forEach(([y, z, radius], index) => {
+    const patch = mesh(new T.CircleGeometry(radius, 12), crumbShadeMaterial, slice, 0.155, y, z)
+    patch.rotation.y = Math.PI / 2
+    patch.scale.y = 0.66 + index * 0.15
+  })
+  const slicePores = [[-0.12, -0.16], [0.1, 0.09], [0.23, -0.04], [-0.02, 0.22], [0.27, 0.2], [-0.2, 0.12], [0.16, -0.2], [-0.24, -0.05]]
   slicePores.forEach(([y, z], index) => {
     const pore = mesh(new T.CircleGeometry(0.013 + (index % 3) * 0.004, 8), poreMaterial, slice, 0.154, y, z)
     pore.rotation.y = Math.PI / 2
@@ -918,8 +969,17 @@ function breadCutDetails(quality: QualityConfig) {
   })
 
   const crumbs = Array.from({ length: 8 }, (_, index) => {
-    const crumb = mesh(new T.IcosahedronGeometry(0.015 + random() * 0.017, 0), crumbMaterial, group)
-    return { crumb, delay: index / 11 + random() * 0.12, x: 0.72 + random() * 0.2, z: (random() - 0.5) * 0.55 }
+    const size = 0.014 + random() * 0.019
+    const crumbGeometry = index % 3 === 0 ? new T.TetrahedronGeometry(size, 0) : new T.IcosahedronGeometry(size, 0)
+    const crumb = mesh(crumbGeometry, crumbMaterial, group)
+    return {
+      crumb,
+      delay: index / 11 + random() * 0.12,
+      x: 0.72 + random() * 0.2,
+      z: (random() - 0.5) * 0.55,
+      stretch: 0.68 + random() * 0.72,
+      drift: (random() - 0.5) * 0.12,
+    }
   })
   return { group, slice, crumbs }
 }
@@ -952,6 +1012,22 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   const fieldModel = wheatField(quality)
   field.add(fieldModel.group)
   group.add(field)
+
+  const wheatMoteCount = quality.mobile ? 14 : 32
+  const wheatMotePositions = new Float32Array(wheatMoteCount * 3)
+  const wheatMoteSeeds = Array.from({ length: wheatMoteCount }, (_, index) => ({
+    x: -2.8 + random() * 5.6,
+    y: 0.45 + random() * 1.75,
+    z: -1.9 + random() * 3.2,
+    phase: random() * Math.PI * 2 + index,
+  }))
+  const wheatMoteGeometry = new T.BufferGeometry()
+  wheatMoteGeometry.setAttribute('position', new T.BufferAttribute(wheatMotePositions, 3))
+  const wheatMoteMaterial = pointsMaterial(0xf4cb79, quality.mobile ? 0.022 : 0.028, 0)
+  const wheatMotes = new T.Points(wheatMoteGeometry, wheatMoteMaterial)
+  wheatMotes.name = 'wheat-pollen'
+  wheatMotes.frustumCulled = false
+  group.add(wheatMotes)
 
   // The hero grain starts in a deliberate gap in the ear, then detaches.
   const kernel = grainKernel(quality)
@@ -990,6 +1066,22 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
     additionSeeds.push({ mesh: piece, x: (random() - 0.5) * 0.65, z: (random() - 0.5) * 0.45, delay: random() * 0.45 })
   }
   group.add(additions)
+
+  const mixtureClumps = new T.Group()
+  mixtureClumps.name = 'forming-dough-clumps'
+  const clumpMaterial = mat(0xd3ab73, quality, 'flour', { roughness: 0.82, bumpScale: 0.012 })
+  const clumpSpecs = Array.from({ length: quality.mobile ? 5 : 8 }, (_, index) => {
+    const clump = mesh(new T.IcosahedronGeometry(1, index % 3 === 0 ? 1 : 0), clumpMaterial, mixtureClumps)
+    const angle = random() * Math.PI * 2
+    return {
+      clump,
+      x: Math.cos(angle) * (0.16 + random() * 0.42),
+      z: Math.sin(angle) * (0.1 + random() * 0.3),
+      size: 0.055 + random() * 0.085,
+      phase: random() * Math.PI * 2,
+    }
+  })
+  group.add(mixtureClumps)
 
   const dough = new DoughMorph(group, quality)
   const cutDetails = breadCutDetails(quality)
@@ -1066,7 +1158,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
     field: new Visibility(field), kernel: new Visibility(kernel), mill: new Visibility(millModel.group),
     top: new Visibility(worktop), bowl: new Visibility(bowlModel.group),
     water: new Visibility(waterGroup), spoon: new Visibility(spoon),
-    additions: new Visibility(additions), basket: new Visibility(basket),
+    additions: new Visibility(additions), clumps: new Visibility(mixtureClumps), basket: new Visibility(basket),
     oven: new Visibility(ovenModel.group), peel: new Visibility(peel),
     final: new Visibility(finalBoard), knife: new Visibility(knife),
     cut: new Visibility(cutDetails.group),
@@ -1116,6 +1208,16 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         fieldModel.update(ambient)
         heroEar.rotation.z = Math.sin(ambient * 0.65) * 0.016 * (1 - extract)
       }
+      const wheatMotePresence = 1 - windowProgress(p, 0.14, 0.255)
+      wheatMotes.visible = wheatMotePresence > 0.002
+      wheatMoteMaterial.opacity = wheatMotePresence * 0.26
+      wheatMotes.position.copy(field.position)
+      wheatMoteSeeds.forEach((seed, index) => {
+        wheatMotePositions[index * 3] = seed.x + Math.sin(ambient * 0.14 + seed.phase) * 0.12
+        wheatMotePositions[index * 3 + 1] = seed.y + Math.sin(ambient * 0.2 + seed.phase * 0.7) * 0.06
+        wheatMotePositions[index * 3 + 2] = seed.z + Math.cos(ambient * 0.11 + seed.phase) * 0.05
+      })
+      wheatMoteGeometry.attributes.position.needsUpdate = true
       visibility.kernel.set(1 - windowProgress(p, 0.29, 0.297))
       temp.set(0.055, 1.98, 0).applyEuler(heroEar.rotation).add(heroEar.position).add(field.position)
       kernelHome.copy(temp)
@@ -1139,7 +1241,9 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
 
       const bowlReveal = windowProgress(p, 0.432, 0.492)
       const bowlRecede = windowProgress(p, 0.592, 0.66)
-      const bowlPresence = windowProgress(p, 0.437, 0.48) * (1 - windowProgress(p, 0.626, 0.668))
+      // The dough fills the foreground as the camera follows it out; finish the
+      // bowl fade while it is still occluded instead of leaving a ghostly rim.
+      const bowlPresence = windowProgress(p, 0.437, 0.48) * (1 - windowProgress(p, 0.61, 0.646))
       bowlModel.group.position.set(0.32 * (1 - bowlReveal) - bowlRecede * 0.28, 0.43 - bowlRecede * 0.05, 0.18 - (1 - bowlReveal) * 2.6 - bowlRecede * 1.45)
       visibility.bowl.set(bowlPresence)
       bowlShadow.position.set(bowlModel.group.position.x, 0.004, bowlModel.group.position.z)
@@ -1175,6 +1279,22 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         seed.mesh.position.set(bowlTarget.x + seed.x, bowlTarget.y + 0.88 * (1 - t * t), bowlTarget.z + seed.z)
       })
 
+      const clumpPresence = windowProgress(p, 0.49, 0.518) * (1 - windowProgress(p, 0.548, 0.575))
+      const clumpMerge = windowProgress(p, 0.505, 0.56)
+      visibility.clumps.set(clumpPresence)
+      clumpMaterial.roughness = 0.88 - windowProgress(p, 0.498, 0.535) * 0.18
+      clumpSpecs.forEach((spec, index) => {
+        const orbit = spec.phase + clumpMerge * (0.8 + index * 0.07)
+        spec.clump.position.set(
+          bowlTarget.x + T.MathUtils.lerp(spec.x, Math.cos(orbit) * 0.07, clumpMerge),
+          bowlTarget.y + 0.025 + Math.sin(orbit * 1.7) * 0.035 * (1 - clumpMerge),
+          bowlTarget.z + T.MathUtils.lerp(spec.z, Math.sin(orbit) * 0.045, clumpMerge),
+        )
+        const scale = spec.size * (1 - clumpMerge * 0.64)
+        spec.clump.scale.set(scale * (1.08 + (index % 2) * 0.16), scale * (0.72 + (index % 3) * 0.08), scale)
+        spec.clump.rotation.set(orbit * 0.23, orbit * 0.5, orbit * -0.16)
+      })
+
       const stir = windowProgress(p, 0.492, 0.568, (value) => value * value * (2 - value))
       const angle = stir * Math.PI * 5
       const resistance = windowProgress(p, 0.535, 0.575)
@@ -1198,9 +1318,9 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
 
       const basketApproach = windowProgress(p, 0.65, 0.705)
       const basketPlace = windowProgress(p, 0.688, 0.735)
-      const basketRecede = windowProgress(p, 0.816, 0.87)
-      basket.position.set(0.36 * (1 - basketApproach), -basketRecede * 0.08, 0.12 - (1 - basketApproach) * 2.35 - basketRecede * 0.9)
-      visibility.basket.set(windowProgress(p, 0.645, 0.692) * (1 - windowProgress(p, 0.835, 0.875)))
+      const basketRecede = windowProgress(p, 0.805, 0.848)
+      basket.position.set(0.25 * (1 - basketApproach), -0.34 * (1 - basketApproach) - basketRecede * 0.38, 0.12 - (1 - basketApproach) * 2.35 - basketRecede * 0.72)
+      visibility.basket.set(windowProgress(p, 0.666, 0.7) * (1 - windowProgress(p, 0.812, 0.846)))
       if (p >= 0.688) arcPosition(doughOnBoard, doughInBasket, basketPlace, 0.28, dough.mesh.position)
       const proofMotePresence = overlap(p, 0.69, 0.82, 0.022)
       proofMotes.visible = proofMotePresence > 0.002
@@ -1251,11 +1371,12 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       visibility.cut.set(cutReveal)
       cutDetails.slice.position.set(0.88 + sliceSeparate * 0.32, 0.43 - sliceSeparate * 0.035, sliceSeparate * 0.045)
       cutDetails.slice.rotation.z = -sliceSeparate * 0.1
-      cutDetails.crumbs.forEach(({ crumb, delay, x, z }, index) => {
+      cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)
         crumb.visible = fall > 0.002
-        crumb.scale.setScalar(windowProgress(fall, 0, 0.28))
-        crumb.position.set(x + fall * (0.06 + index * 0.006), 0.62 - fall * (0.5 + (index % 3) * 0.035), z + Math.sin(index * 2.3) * fall * 0.08)
+        const growth = windowProgress(fall, 0, 0.28)
+        crumb.scale.set(growth * stretch, growth * (0.72 + (index % 2) * 0.25), growth)
+        crumb.position.set(x + fall * (0.06 + index * 0.006) + drift * fall, 0.62 - fall * (0.5 + (index % 3) * 0.035), z + Math.sin(index * 2.3) * fall * 0.08)
         crumb.rotation.set(fall * index, fall * 2.1, fall * 0.7)
       })
       const airborne = Math.max(bell(liftOut), bell(basketPlace), bell(intoOven), bell(finish))
