@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 export type Keyframe<T> = { at: number; value: T }
+export type SplineKeyframe<T> = Keyframe<T> & { tension?: number }
 
 export function clamp01(value: number) {
   return THREE.MathUtils.clamp(value, 0, 1)
@@ -67,6 +68,82 @@ export function sampleVectorKeyframes(progress: number, keyframes: Keyframe<THRE
     const previous = keyframes[i - 1]
     const current = keyframes[i]
     if (p <= current.at) return target.lerpVectors(previous.value, current.value, cinematic((p - previous.at) / (current.at - previous.at)))
+  }
+  return target.copy(keyframes[keyframes.length - 1].value)
+}
+
+function splineTangent<T>(keyframes: SplineKeyframe<T>[], index: number, valueAt: (value: T) => number) {
+  const current = keyframes[index]
+  const tension = THREE.MathUtils.clamp(current.tension ?? 0, 0, 1)
+  if (index === 0) {
+    const next = keyframes[1]
+    return ((valueAt(next.value) - valueAt(current.value)) / Math.max(next.at - current.at, 0.0001)) * (1 - tension)
+  }
+  if (index === keyframes.length - 1) {
+    const previous = keyframes[index - 1]
+    return ((valueAt(current.value) - valueAt(previous.value)) / Math.max(current.at - previous.at, 0.0001)) * (1 - tension)
+  }
+  const previous = keyframes[index - 1]
+  const next = keyframes[index + 1]
+  return ((valueAt(next.value) - valueAt(previous.value)) / Math.max(next.at - previous.at, 0.0001)) * (1 - tension)
+}
+
+function hermite(value0: number, value1: number, tangent0: number, tangent1: number, span: number, local: number) {
+  const local2 = local * local
+  const local3 = local2 * local
+  const h00 = 2 * local3 - 3 * local2 + 1
+  const h10 = local3 - 2 * local2 + local
+  const h01 = -2 * local3 + 3 * local2
+  const h11 = local3 - local2
+  return h00 * value0 + h10 * span * tangent0 + h01 * value1 + h11 * span * tangent1
+}
+
+// Progress-timed cubic Hermite sampling. Interior tangents are derived from the
+// surrounding control points, so ordinary keys redirect the path without
+// forcing the camera to stop. Optional tension is reserved for narrative rests.
+export function sampleNumberSplineKeyframes(progress: number, keyframes: SplineKeyframe<number>[]) {
+  const p = clamp01(progress)
+  if (p <= keyframes[0].at) return keyframes[0].value
+  for (let index = 1; index < keyframes.length; index += 1) {
+    const previous = keyframes[index - 1]
+    const current = keyframes[index]
+    if (p <= current.at) {
+      const span = Math.max(current.at - previous.at, 0.0001)
+      const local = THREE.MathUtils.clamp((p - previous.at) / span, 0, 1)
+      return hermite(
+        previous.value,
+        current.value,
+        splineTangent(keyframes, index - 1, (value) => value),
+        splineTangent(keyframes, index, (value) => value),
+        span,
+        local,
+      )
+    }
+  }
+  return keyframes[keyframes.length - 1].value
+}
+
+export function sampleVectorSplineKeyframes(progress: number, keyframes: SplineKeyframe<THREE.Vector3>[], target: THREE.Vector3) {
+  const p = clamp01(progress)
+  if (p <= keyframes[0].at) return target.copy(keyframes[0].value)
+  for (let index = 1; index < keyframes.length; index += 1) {
+    const previous = keyframes[index - 1]
+    const current = keyframes[index]
+    if (p <= current.at) {
+      const span = Math.max(current.at - previous.at, 0.0001)
+      const local = THREE.MathUtils.clamp((p - previous.at) / span, 0, 1)
+      const px = splineTangent(keyframes, index - 1, (value) => value.x)
+      const py = splineTangent(keyframes, index - 1, (value) => value.y)
+      const pz = splineTangent(keyframes, index - 1, (value) => value.z)
+      const cx = splineTangent(keyframes, index, (value) => value.x)
+      const cy = splineTangent(keyframes, index, (value) => value.y)
+      const cz = splineTangent(keyframes, index, (value) => value.z)
+      return target.set(
+        hermite(previous.value.x, current.value.x, px, cx, span, local),
+        hermite(previous.value.y, current.value.y, py, cy, span, local),
+        hermite(previous.value.z, current.value.z, pz, cz, span, local),
+      )
+    }
   }
   return target.copy(keyframes[keyframes.length - 1].value)
 }

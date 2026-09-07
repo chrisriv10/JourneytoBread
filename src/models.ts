@@ -1,5 +1,15 @@
 import * as T from 'three'
-import { arcPosition, bell, clamp01, delayed, overlap, weightedOut, windowProgress } from './motion'
+import {
+  arcPosition,
+  bell,
+  clamp01,
+  delayed,
+  overlap,
+  sampleVectorSplineKeyframes,
+  weightedOut,
+  windowProgress,
+  type SplineKeyframe,
+} from './motion'
 import type { PointerState, QualityConfig } from './types'
 import { PALETTE, pointsMaterial } from './geometry'
 
@@ -287,13 +297,13 @@ class DoughMorph {
   apply(p: number) {
     if (p === this.lastProgress) return
     this.lastProgress = p
-    const mixing = windowProgress(p, 0.505, 0.57)
-    const shaping = windowProgress(p, 0.6, 0.68)
-    const proof = windowProgress(p, 0.706, 0.77)
-    const spring = windowProgress(p, 0.818, 0.868)
-    const baking = windowProgress(p, 0.824, 0.91)
-    const scoring = windowProgress(p, 0.772, 0.785)
-    const knead = windowProgress(p, 0.6, 0.675, (t) => t)
+    const mixing = windowProgress(p, 0.502, 0.575)
+    const shaping = windowProgress(p, 0.598, 0.692)
+    const proof = windowProgress(p, 0.705, 0.778)
+    const spring = windowProgress(p, 0.834, 0.885)
+    const baking = windowProgress(p, 0.842, 0.925)
+    const scoring = windowProgress(p, 0.776, 0.803)
+    const knead = windowProgress(p, 0.61, 0.69, (t) => t)
     const pressure = Math.sin(knead * Math.PI * 3) ** 2 * bell(knead)
     // Stop just shy of a mathematically flat collapse; the crumb face covers the
     // remaining cap while avoiding degenerate triangles in the persistent loaf.
@@ -301,7 +311,7 @@ class DoughMorph {
     const width = 0.8 + mixing * 0.12 + shaping * 0.18 + proof * 0.18 + spring * 0.12
     const height = 0.08 + mixing * 0.57 + proof * 0.2 + spring * 0.11
     const depth = 0.69 + mixing * 0.05 + proof * 0.07
-    const stirAngle = windowProgress(p, 0.49, 0.56, (t) => t) * Math.PI * 5
+    const stirAngle = windowProgress(p, 0.492, 0.565, (t) => t) * Math.PI * 5
     for (let i = 0; i < this.position.count; i += 1) {
       const x = this.original[i * 3]
       const y = this.original[i * 3 + 1]
@@ -437,10 +447,20 @@ class FlourSystem {
     hazeContext.fillRect(0, 0, 96, 96)
     const hazeTexture = new T.CanvasTexture(hazeCanvas)
     hazeTexture.colorSpace = T.SRGBColorSpace
-    for (let i = 0; i < (quality.mobile ? 4 : 8); i += 1) {
-      const material = new T.SpriteMaterial({ map: hazeTexture, color: 0xf5ead2, transparent: true, opacity: 0, depthWrite: false })
+    const hazeCount = quality.mobile ? 4 : 8
+    const veilCount = quality.mobile ? 2 : 3
+    for (let i = 0; i < hazeCount; i += 1) {
+      const material = new T.SpriteMaterial({
+        map: hazeTexture,
+        color: 0xf5ead2,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        depthTest: i >= veilCount,
+      })
       const sprite = new T.Sprite(material)
       sprite.frustumCulled = false
+      sprite.renderOrder = i < veilCount ? 12 : 0
       this.group.add(sprite)
       this.haze.push({ sprite, material, phase: random() * Math.PI * 2, near: random(), scale: 0.7 + random() * 0.85 })
     }
@@ -464,10 +484,10 @@ class FlourSystem {
   }
 
   update(p: number, time: number, outlet: T.Vector3, bowlTarget: T.Vector3) {
-    const emitted = windowProgress(p, 0.283, 0.386, (t) => t)
-    const transfer = windowProgress(p, 0.437, 0.487, (t) => t)
-    const amount = windowProgress(p, 0.296, 0.39) * (1 - windowProgress(p, 0.44, 0.486))
-    this.group.visible = p >= 0.282 && p <= 0.49
+    const emitted = windowProgress(p, 0.288, 0.405, (t) => t * t * (2 - t))
+    const transfer = windowProgress(p, 0.42, 0.51, (t) => t * t)
+    const amount = windowProgress(p, 0.3, 0.405) * (1 - windowProgress(p, 0.425, 0.475))
+    this.group.visible = p >= 0.278 && p <= 0.52
     this.pile.position.set(-0.65, 0, 0.85)
     this.pile.scale.setScalar(Math.max(0.001, Math.cbrt(amount)))
     this.pile.visible = amount > 0.0001
@@ -475,17 +495,24 @@ class FlourSystem {
     this.pileShadow.scale.setScalar(Math.max(0.001, Math.sqrt(amount)))
     this.pileShadow.visible = this.pile.visible
     if (!this.group.visible) return
-    const hazePresence = Math.max(bell(emitted) * (1 - transfer) * 0.42, bell(transfer))
+    const cloudMask = windowProgress(p, 0.318, 0.372) * (1 - windowProgress(p, 0.472, 0.515))
+    const hazePresence = Math.max(bell(emitted, 0.58, 0.58) * (1 - transfer) * 0.55, cloudMask, bell(transfer))
+    const transitionVeil = windowProgress(p, 0.405, 0.437) * (1 - windowProgress(p, 0.448, 0.482))
+    const veilCount = this.haze.length <= 4 ? 2 : 3
     this.haze.forEach((entry, index) => {
       const nearPass = Math.pow(entry.near, 1.6)
-      entry.sprite.visible = hazePresence > 0.003
-      entry.material.opacity = hazePresence * (0.035 + nearPass * 0.038)
+      const isVeil = index < veilCount
+      const opacity = isVeil
+        ? Math.max(hazePresence * (0.2 + nearPass * 0.22), transitionVeil * (0.54 + nearPass * 0.2))
+        : hazePresence * (0.24 + nearPass * 0.34)
+      entry.sprite.visible = opacity > 0.003
+      entry.material.opacity = opacity
       entry.sprite.position.set(
-        T.MathUtils.lerp(-0.62, bowlTarget.x, transfer) + Math.sin(entry.phase + transfer * 3) * 0.42,
-        0.34 + nearPass * 0.72 + Math.cos(entry.phase + time * 0.18) * 0.11,
-        0.7 + nearPass * 1.65 + Math.sin(index * 1.7) * 0.16,
+        T.MathUtils.lerp(-0.35, bowlTarget.x, transfer) + Math.sin(entry.phase + transfer * 3) * 0.78,
+        0.42 + nearPass * 0.88 - transfer * (0.08 + nearPass * 0.24) + Math.cos(entry.phase + time * 0.18) * 0.11,
+        1.8 + nearPass * 2.1 + Math.sin(index * 1.7) * 0.16,
       )
-      const scale = entry.scale * (0.65 + nearPass * 0.75) * (0.7 + hazePresence * 0.45)
+      const scale = entry.scale * (1.2 + nearPass * 1.5) * (1 + hazePresence * 0.55)
       entry.sprite.scale.set(scale, scale * 0.68, 1)
     })
     this.particles.forEach((particle, i) => {
@@ -1036,23 +1063,39 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   group.add(steam)
 
   const visibility = {
-    field: new Visibility(field), mill: new Visibility(millModel.group),
+    field: new Visibility(field), kernel: new Visibility(kernel), mill: new Visibility(millModel.group),
     top: new Visibility(worktop), bowl: new Visibility(bowlModel.group),
     water: new Visibility(waterGroup), spoon: new Visibility(spoon),
     additions: new Visibility(additions), basket: new Visibility(basket),
     oven: new Visibility(ovenModel.group), peel: new Visibility(peel),
     final: new Visibility(finalBoard), knife: new Visibility(knife),
+    cut: new Visibility(cutDetails.group),
   }
   const kernelHome = new T.Vector3(-0.155, 1.98, 0.26)
   const kernelFocus = new T.Vector3(0, 1.5, 0.65)
   const hopper = new T.Vector3()
   const outlet = new T.Vector3()
   const bowlTarget = new T.Vector3()
-  const doughInBowl = new T.Vector3()
+  const doughInBowl = new T.Vector3(0, 0.48, 0.18)
   const doughOnBoard = new T.Vector3(0, 0.002, 0.12)
   const doughInBasket = new T.Vector3(0, 0.075, 0.12)
   const ovenDestination = new T.Vector3(0, 0.105, -1.4)
   const finalDestination = new T.Vector3(0, 0.02, 0.48)
+  const knifePositionKeys: SplineKeyframe<T.Vector3>[] = [
+    { at: 0.968, value: new T.Vector3(0.78, 1.78, 0.63) },
+    { at: 0.982, value: new T.Vector3(0.78, 1.26, 0.57) },
+    { at: 0.989, value: new T.Vector3(0.78, 0.99, 0.51), tension: 0.58 },
+    { at: 0.997, value: new T.Vector3(0.84, 0.73, 0.49) },
+    { at: 1, value: new T.Vector3(1.7, 1.05, 0.49) },
+  ]
+  const knifeRotationKeys: SplineKeyframe<T.Vector3>[] = [
+    { at: 0.968, value: new T.Vector3(0.04, -0.08, -0.18) },
+    { at: 0.989, value: new T.Vector3(0.04, -0.08, -0.1), tension: 0.5 },
+    { at: 0.997, value: new T.Vector3(0.04, -0.02, -0.08) },
+    { at: 1, value: new T.Vector3(0.04, 0.1, 0.18) },
+  ]
+  const knifePosition = new T.Vector3()
+  const knifeRotation = new T.Vector3()
   const waterStart = new T.Vector3()
   const up = new T.Vector3(0,1,0)
 
@@ -1062,97 +1105,104 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const p = clamp01(progress)
       const ambient = currentQuality.reducedMotion ? 0 : time
       const flourish = currentQuality.reducedMotion ? 0.35 : 1
-      const extract = windowProgress(p, 0.085, 0.165)
-      const feed = windowProgress(p, 0.218, 0.28, weightedOut)
-      const millEnter = windowProgress(p, 0.184, 0.235)
-      const millExit = windowProgress(p, 0.355, 0.413)
-      field.position.set(0, 0, -windowProgress(p, 0.13, 0.25) * 2)
-      visibility.field.set(1 - windowProgress(p, 0.166, 0.248))
+      const extract = windowProgress(p, 0.082, 0.17)
+      const feed = windowProgress(p, 0.225, 0.292, (value) => value * value)
+      const millEnter = windowProgress(p, 0.182, 0.242)
+      const millExit = windowProgress(p, 0.43, 0.47)
+      const fieldRetreat = windowProgress(p, 0.138, 0.285)
+      field.position.set(-fieldRetreat * 0.08, 0, -fieldRetreat * 2.3)
+      visibility.field.set(1 - windowProgress(p, 0.19, 0.298))
       if (field.visible) {
         fieldModel.update(ambient)
         heroEar.rotation.z = Math.sin(ambient * 0.65) * 0.016 * (1 - extract)
       }
-      kernel.visible = p < 0.285
+      visibility.kernel.set(1 - windowProgress(p, 0.29, 0.297))
       temp.set(0.055, 1.98, 0).applyEuler(heroEar.rotation).add(heroEar.position).add(field.position)
       kernelHome.copy(temp)
       kernel.position.lerpVectors(kernelHome, kernelFocus, extract)
       kernel.scale.setScalar(0.11 + extract * 0.64)
       kernel.rotation.set(0.06 * extract, 0.08 * extract, -0.43 + extract * 1.12)
-      millModel.group.position.set(2.3 * (1 - millEnter) - millExit * 1.6, 0, -0.4 - (1 - millEnter) * 2.2 - millExit * 1.5)
-      visibility.mill.set(windowProgress(p, 0.18, 0.22) * (1 - windowProgress(p, 0.385, 0.42)))
+      millModel.group.position.set(0.12 + (1 - millEnter) * 0.34 - millExit * 0.1, 0, -0.4 - (1 - millEnter) * 2.55 - millExit * 0.65)
+      visibility.mill.set(windowProgress(p, 0.178, 0.228) * (1 - windowProgress(p, 0.423, 0.448)))
       hopper.set(millModel.group.position.x, 1.21, millModel.group.position.z)
       if (feed > 0) {
         arcPosition(kernelFocus, hopper, feed, 0.65 * flourish, kernel.position)
-        kernel.scale.setScalar(1 - feed * 0.94)
+        kernel.scale.setScalar(T.MathUtils.lerp(0.75, 0.07, feed))
         kernel.rotation.z += feed * 1.6
       }
-      // Grain is hidden by the opaque hopper when the output begins.
-      if (p >= 0.281) kernel.visible = false
-      const grind = windowProgress(p, 0.268, 0.372, (t) => t * t)
+      // The only remaining fade occurs after the tiny kernel is inside the
+      // opaque feed throat, so reverse scrubbing reads as physical emergence.
+      const grind = windowProgress(p, 0.284, 0.405, (value) => value * value * (2 - value))
       millModel.rotor.rotation.y = grind * Math.PI * 9 + Math.sin(ambient * 0.35) * 0.014 * bell(grind)
       outlet.copy(millModel.outlet).add(millModel.group.position)
-      visibility.top.set(windowProgress(p, 0.205, 0.24) * (1 - windowProgress(p, 0.785, 0.82)))
+      visibility.top.set(windowProgress(p, 0.205, 0.255) * (1 - windowProgress(p, 0.8, 0.845)))
 
-      const bowlEnter = windowProgress(p, 0.407, 0.444)
-      const bowlCenter = windowProgress(p, 0.487, 0.53)
-      const bowlExit = windowProgress(p, 0.58, 0.586)
-      bowlModel.group.position.set(2.9 - bowlEnter * 1.45 - bowlCenter * 1.45 - bowlExit * 3.2, 0.43, 0.18 - (1 - bowlEnter) * 1.3)
-      visibility.bowl.set(windowProgress(p, 0.404, 0.432) * (1 - windowProgress(p, 0.59, 0.615)))
-      bowlShadow.position.set(bowlModel.group.position.x, 0.004, 0.18)
-      bowlShadow.visible = bowlModel.group.visible
+      const bowlReveal = windowProgress(p, 0.432, 0.492)
+      const bowlRecede = windowProgress(p, 0.592, 0.66)
+      const bowlPresence = windowProgress(p, 0.437, 0.48) * (1 - windowProgress(p, 0.626, 0.668))
+      bowlModel.group.position.set(0.32 * (1 - bowlReveal) - bowlRecede * 0.28, 0.43 - bowlRecede * 0.05, 0.18 - (1 - bowlReveal) * 2.6 - bowlRecede * 1.45)
+      visibility.bowl.set(bowlPresence)
+      bowlShadow.position.set(bowlModel.group.position.x, 0.004, bowlModel.group.position.z)
+      bowlShadow.material.opacity = bowlPresence * 0.86
+      bowlShadow.visible = bowlShadow.material.opacity > 0.002
       bowlTarget.copy(bowlModel.group.position).add(temp.set(0, 0.16, 0))
       flour.update(p, ambient, outlet, bowlTarget)
-      const fill = windowProgress(p, 0.442, 0.487)
-      const mixing = windowProgress(p, 0.505, 0.57)
-      bowlModel.flourSurface.visible = fill > 0 && mixing < 0.38
+      const fill = windowProgress(p, 0.432, 0.49)
+      const mixing = windowProgress(p, 0.502, 0.575)
+      const dryToWet = windowProgress(p, 0.502, 0.542)
+      const flourSurfaceOpacity = fill * bowlPresence * (1 - dryToWet)
+      bowlModel.flourSurface.visible = flourSurfaceOpacity > 0.002
       bowlModel.flourSurface.scale.setScalar(Math.sqrt(fill) * (1 - mixing * 0.08))
       bowlModel.flourSurface.position.y = -0.18 + fill * 0.38 - mixing * 0.13
-      bowlModel.flourSurface.material.opacity = 1 - T.MathUtils.smoothstep(mixing, 0, 0.32)
-      bowlModel.flourSurface.material.transparent = mixing > 0.001
-      bowlModel.flourSurface.material.depthWrite = mixing < 0.08
+      bowlModel.flourSurface.material.opacity = flourSurfaceOpacity
+      bowlModel.flourSurface.material.transparent = dryToWet > 0.001
+      bowlModel.flourSurface.material.depthWrite = dryToWet < 0.08
 
-      const pouring = windowProgress(p, 0.487, 0.517)
+      const pouring = windowProgress(p, 0.486, 0.524)
       waterGroup.position.set(bowlModel.group.position.x - 1.12, 1.54 + bell(pouring) * 0.06, 0.16)
       waterGroup.rotation.z = -0.3 - bell(pouring) * 0.72
-      visibility.water.set(overlap(p, 0.482, 0.536, 0.012))
+      visibility.water.set(overlap(p, 0.477, 0.546, 0.016))
       waterStart.set(0.29, 0.27, 0).applyEuler(waterGroup.rotation).add(waterGroup.position)
       waterStream.position.copy(waterStart).add(bowlTarget).multiplyScalar(0.5)
       waterStream.quaternion.setFromUnitVectors(up, temp.copy(waterStart).sub(bowlTarget).normalize())
       waterStream.scale.set(1, waterStart.distanceTo(bowlTarget), 1)
       waterStream.visible = pouring > 0.01 && pouring < 0.99
       waterMaterial.opacity = bell(pouring) * 0.58
-      const season = windowProgress(p, 0.5, 0.523, (t) => t)
-      visibility.additions.set(overlap(p, 0.498, 0.526, 0.008))
+      const season = windowProgress(p, 0.498, 0.535, (value) => value * value)
+      visibility.additions.set(overlap(p, 0.495, 0.542, 0.011))
       additionSeeds.forEach((seed) => {
         const t = clamp01((season - seed.delay) / 0.55)
         seed.mesh.position.set(bowlTarget.x + seed.x, bowlTarget.y + 0.88 * (1 - t * t), bowlTarget.z + seed.z)
       })
 
-      const stir = windowProgress(p, 0.49, 0.56, (t) => t)
+      const stir = windowProgress(p, 0.492, 0.568, (value) => value * value * (2 - value))
       const angle = stir * Math.PI * 5
-      const resistance = windowProgress(p, 0.535, 0.562)
+      const resistance = windowProgress(p, 0.535, 0.575)
+      const spoonWithdraw = windowProgress(p, 0.552, 0.615, weightedOut)
       spoon.position.set(bowlTarget.x + Math.cos(angle) * (0.48 - resistance * 0.15), 0.66 + mixing * 0.06, bowlTarget.z + Math.sin(angle) * 0.32)
       spoon.rotation.set(-0.2 + Math.sin(angle) * 0.12, angle, -0.34 + resistance * 0.15)
-      spoon.position.y += windowProgress(p, 0.554, 0.583) * 1.5
-      visibility.spoon.set(overlap(p, 0.493, 0.59, 0.012))
+      spoon.position.y += spoonWithdraw * 1.28
+      spoon.position.z -= spoonWithdraw * 0.34
+      visibility.spoon.set(overlap(p, 0.488, 0.628, 0.018))
 
       // Topology is shared from the first cohesive mixture through the final loaf.
-      dough.mesh.visible = p > 0.505
+      const doughOpacity = windowProgress(p, 0.498, 0.538)
+      dough.mesh.visible = doughOpacity > 0.002
       dough.apply(p)
-      dough.mesh.material.opacity = windowProgress(p, 0.505, 0.533)
+      dough.mesh.material.opacity = doughOpacity
       dough.mesh.material.depthWrite = dough.mesh.material.opacity > 0.98
-      doughInBowl.set(p < 0.565 ? bowlModel.group.position.x : 0, 0.48, 0.18)
-      const liftOut = windowProgress(p, 0.565, 0.6)
-      arcPosition(doughInBowl, doughOnBoard, liftOut, 0.86, dough.mesh.position)
-      const knead = windowProgress(p, 0.6, 0.675, (t) => t)
+      const liftOut = windowProgress(p, 0.565, 0.625)
+      arcPosition(doughInBowl, doughOnBoard, liftOut, 0.42, dough.mesh.position)
+      const knead = windowProgress(p, 0.61, 0.69, (value) => value)
       dough.mesh.rotation.set(0, Math.sin(knead * Math.PI * 3) * bell(knead) * 0.06, 0)
 
-      const basketEnter = windowProgress(p, 0.665, 0.682)
-      const basketPlace = windowProgress(p, 0.681, 0.705)
-      basket.position.set(1.5 * (1 - basketEnter) + 2.7 * (1 - windowProgress(p, 0.69, 0.702)), 0, 0.12)
-      visibility.basket.set(overlap(p, 0.665, 0.807, 0.013))
-      if (p >= 0.681) arcPosition(doughOnBoard, doughInBasket, basketPlace, 0.75, dough.mesh.position)
-      const proofMotePresence = overlap(p, 0.69, 0.795, 0.018)
+      const basketApproach = windowProgress(p, 0.65, 0.705)
+      const basketPlace = windowProgress(p, 0.688, 0.735)
+      const basketRecede = windowProgress(p, 0.816, 0.87)
+      basket.position.set(0.36 * (1 - basketApproach), -basketRecede * 0.08, 0.12 - (1 - basketApproach) * 2.35 - basketRecede * 0.9)
+      visibility.basket.set(windowProgress(p, 0.645, 0.692) * (1 - windowProgress(p, 0.835, 0.875)))
+      if (p >= 0.688) arcPosition(doughOnBoard, doughInBasket, basketPlace, 0.28, dough.mesh.position)
+      const proofMotePresence = overlap(p, 0.69, 0.82, 0.022)
       proofMotes.visible = proofMotePresence > 0.002
       proofMoteMaterial.opacity = proofMotePresence * 0.22
       proofMoteSeeds.forEach((seed, index) => {
@@ -1163,20 +1213,20 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       })
       proofMoteGeometry.attributes.position.needsUpdate = true
 
-      const ovenEnter = windowProgress(p, 0.75, 0.786)
-      const ovenExit = windowProgress(p, 0.929, 0.977)
-      ovenModel.group.position.set(0, 0, -1.4 - 2.8 * (1 - ovenEnter) - ovenExit * 2.8)
-      visibility.oven.set(windowProgress(p, 0.75, 0.777) * (1 - windowProgress(p, 0.95, 0.985)))
-      const intoOven = windowProgress(p, 0.779, 0.817)
-      if (p >= 0.779) {
-        arcPosition(doughInBasket, ovenDestination, intoOven, 0.62, dough.mesh.position)
-        basket.position.x = -windowProgress(p, 0.787, 0.809) * 2.8
-      }
-      const peelIn = windowProgress(p, 0.783, 0.802)
-      peel.position.set(0, 0.053, -1.4 + 2.7 * (1 - peelIn))
-      visibility.peel.set(overlap(p, 0.782, 0.835, 0.013))
-      peel.position.z += windowProgress(p, 0.814, 0.837) * 3
-      const glow = windowProgress(p, 0.782, 0.826) * (1 - ovenExit)
+      const ovenEnter = windowProgress(p, 0.738, 0.812)
+      const ovenExit = windowProgress(p, 0.95, 0.988)
+      ovenModel.group.position.set(0, 0, -1.4 - 3.2 * (1 - ovenEnter) - ovenExit * 0.25)
+      visibility.oven.set(windowProgress(p, 0.735, 0.792) * (1 - windowProgress(p, 0.965, 0.993)))
+      const peelIn = windowProgress(p, 0.77, 0.808)
+      const intoOven = windowProgress(p, 0.808, 0.858)
+      const peelRetract = windowProgress(p, 0.858, 0.9, weightedOut)
+      let peelZ = T.MathUtils.lerp(1.2, 0.12, peelIn)
+      if (intoOven > 0) peelZ = T.MathUtils.lerp(0.12, ovenDestination.z, intoOven)
+      if (peelRetract > 0) peelZ = T.MathUtils.lerp(ovenDestination.z, 1.45, peelRetract)
+      peel.position.set(0, 0.053, peelZ)
+      visibility.peel.set(windowProgress(p, 0.765, 0.8) * (1 - windowProgress(p, 0.88, 0.91)))
+      if (p >= 0.808) arcPosition(doughInBasket, ovenDestination, intoOven, 0.22, dough.mesh.position)
+      const glow = windowProgress(p, 0.748, 0.83) * (1 - ovenExit)
       ovenModel.glow.material.opacity = glow * (0.3 + Math.sin(ambient * 3.1) * 0.025)
       ovenModel.embers.forEach((ember, index) => {
         const flicker = 0.86 + Math.sin(ambient * (1.7 + index * 0.07) + ember.userData.phase) * 0.13 + Math.sin(ambient * 3.3 + index) * 0.05
@@ -1185,32 +1235,38 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         ember.scale.set(coalScale, coalScale * 0.58, coalScale * 0.84)
       })
 
-      const finish = windowProgress(p, 0.917, 0.967)
-      finalBoard.position.set(0, 0, 3.1 * (1 - finish) + 0.48)
-      visibility.final.set(windowProgress(p, 0.914, 0.94))
-      if (p >= 0.917) arcPosition(ovenDestination, finalDestination, finish, 0.3 * flourish, dough.mesh.position)
+      const finish = windowProgress(p, 0.925, 0.972)
+      finalBoard.position.set(0, 0, 0.48)
+      visibility.final.set(windowProgress(p, 0.94, 0.97))
+      if (p >= 0.925) arcPosition(ovenDestination, finalDestination, finish, 0.28 * flourish, dough.mesh.position)
       dough.mesh.rotation.y += finish * -0.12
-      const knifeDescent = windowProgress(p, 0.974, 0.993)
       const knifeCut = windowProgress(p, 0.989, 0.997)
-      const knifeExit = windowProgress(p, 0.996, 1)
-      knife.position.set(0.78 + knifeExit * 0.92, 1.78 - knifeDescent * 0.82 - knifeCut * 0.23 + knifeExit * 0.32, 0.49 + (1 - knifeDescent) * 0.14)
-      knife.rotation.set(0.04, -0.08 + knifeExit * 0.18, -0.18 + knifeDescent * 0.08 + knifeExit * 0.28)
-      visibility.knife.set(overlap(p, 0.971, 1, 0.006))
-      cutDetails.group.visible = knifeCut > 0.002
-      cutDetails.slice.position.set(0.88 + knifeCut * 0.32, 0.43 - knifeCut * 0.035, knifeCut * 0.045)
-      cutDetails.slice.rotation.z = -knifeCut * 0.1
+      const cutReveal = windowProgress(p, 0.99, 0.997)
+      const sliceSeparate = windowProgress(p, 0.994, 1)
+      sampleVectorSplineKeyframes(p, knifePositionKeys, knifePosition)
+      sampleVectorSplineKeyframes(p, knifeRotationKeys, knifeRotation)
+      knife.position.copy(knifePosition)
+      knife.rotation.set(knifeRotation.x, knifeRotation.y, knifeRotation.z)
+      visibility.knife.set(overlap(p, 0.965, 1, 0.007))
+      visibility.cut.set(cutReveal)
+      cutDetails.slice.position.set(0.88 + sliceSeparate * 0.32, 0.43 - sliceSeparate * 0.035, sliceSeparate * 0.045)
+      cutDetails.slice.rotation.z = -sliceSeparate * 0.1
       cutDetails.crumbs.forEach(({ crumb, delay, x, z }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)
-        crumb.visible = fall > 0
+        crumb.visible = fall > 0.002
+        crumb.scale.setScalar(windowProgress(fall, 0, 0.28))
         crumb.position.set(x + fall * (0.06 + index * 0.006), 0.62 - fall * (0.5 + (index % 3) * 0.035), z + Math.sin(index * 2.3) * fall * 0.08)
         crumb.rotation.set(fall * index, fall * 2.1, fall * 0.7)
       })
-      doughShadow.position.set(dough.mesh.position.x, p < 0.779 ? 0.003 : p < 0.917 ? 0.101 : 0.019, dough.mesh.position.z)
-      doughShadow.visible = p > 0.598
-      doughShadow.material.opacity = 0.65 * (1 - bell(liftOut) * 0.8)
+      const airborne = Math.max(bell(liftOut), bell(basketPlace), bell(intoOven), bell(finish))
+      const doughShadowOpacity = windowProgress(p, 0.61, 0.635) * 0.62 * (1 - airborne * 0.9)
+      doughShadow.position.set(dough.mesh.position.x, p < 0.808 ? 0.003 : p < 0.925 ? 0.101 : 0.019, dough.mesh.position.z)
+      doughShadow.visible = doughShadowOpacity > 0.002
+      doughShadow.material.opacity = doughShadowOpacity
       steam.position.copy(dough.mesh.position)
-      steam.visible = p > 0.868 && !currentQuality.reducedMotion
-      steamMaterial.opacity = delayed(p, 0.863, 0.918, 0.1) * 0.13
+      const steamOpacity = delayed(p, 0.863, 0.93, 0.1) * 0.13
+      steam.visible = steamOpacity > 0.002 && !currentQuality.reducedMotion
+      steamMaterial.opacity = steamOpacity
       for (let i = 0; i < 24; i += 1) {
         const life = (ambient * 0.11 + i / 24) % 1
         steamParticles[i * 3] = Math.sin(i * 2.4) * 0.65 + Math.sin(ambient * 0.35 + i) * life * 0.1

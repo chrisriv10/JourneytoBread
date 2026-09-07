@@ -3,7 +3,15 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { damp, dampVector, sampleNumberKeyframes, sampleVectorKeyframes, softIn, windowProgress, type Keyframe } from './motion'
+import {
+  damp,
+  sampleNumberSplineKeyframes,
+  sampleVectorSplineKeyframes,
+  softIn,
+  windowProgress,
+  type Keyframe,
+  type SplineKeyframe,
+} from './motion'
 import { createJourneySequence, type JourneySequence, type SequenceContext } from './models'
 import type { JourneyState, PointerState, QualityConfig } from './types'
 import { STAGES } from './types'
@@ -11,48 +19,57 @@ import { PALETTE } from './geometry'
 
 type ColorKeyframe = Keyframe<THREE.Color>
 
-const cameraPositionKeys: Keyframe<THREE.Vector3>[] = [
+const cameraPositionKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-0.82, 1.1, 5.25) },
   { at: 0.08, value: new THREE.Vector3(-0.54, 1.2, 4.6) },
-  { at: 0.15, value: new THREE.Vector3(0.82, 1.72, 4.25) },
-  { at: 0.22, value: new THREE.Vector3(0.95, 1.76, 4.15) },
-  { at: 0.3, value: new THREE.Vector3(-1.44, 1.42, 4.9) },
-  { at: 0.37, value: new THREE.Vector3(1.2, 1.88, 4.82) },
-  { at: 0.45, value: new THREE.Vector3(0.88, 2.72, 5.15) },
-  { at: 0.53, value: new THREE.Vector3(0.84, 2.46, 4.7) },
-  { at: 0.63, value: new THREE.Vector3(-0.82, 1.72, 4.18) },
-  { at: 0.74, value: new THREE.Vector3(0.5, 2.02, 4.45) },
-  { at: 0.85, value: new THREE.Vector3(-0.82, 1.45, 4.02) },
-  { at: 0.93, value: new THREE.Vector3(1.02, 2.06, 4.85) },
-  { at: 0.975, value: new THREE.Vector3(1.8, 1.66, 5.12) },
-  { at: 0.99, value: new THREE.Vector3(2.58, 1.62, 4.72) },
+  { at: 0.145, value: new THREE.Vector3(0.58, 1.7, 4.22), tension: 0.35 },
+  { at: 0.2, value: new THREE.Vector3(0.78, 1.75, 4.12), tension: 0.62 },
+  { at: 0.245, value: new THREE.Vector3(0.34, 1.67, 4.25) },
+  { at: 0.31, value: new THREE.Vector3(-0.86, 1.43, 4.78) },
+  { at: 0.375, value: new THREE.Vector3(-0.12, 1.7, 4.62) },
+  { at: 0.44, value: new THREE.Vector3(0.62, 2.44, 5.05) },
+  { at: 0.52, value: new THREE.Vector3(0.78, 2.46, 4.72) },
+  { at: 0.61, value: new THREE.Vector3(0.1, 1.9, 4.38) },
+  { at: 0.68, value: new THREE.Vector3(-0.56, 1.74, 4.18) },
+  { at: 0.74, value: new THREE.Vector3(0.38, 2.02, 4.45), tension: 0.82 },
+  { at: 0.8, value: new THREE.Vector3(0.12, 1.88, 4.32) },
+  { at: 0.855, value: new THREE.Vector3(-0.68, 1.45, 4.02) },
+  { at: 0.92, value: new THREE.Vector3(0.14, 1.72, 4.35) },
+  { at: 0.955, value: new THREE.Vector3(0.9, 2, 4.78), tension: 0.28 },
+  { at: 0.98, value: new THREE.Vector3(1.95, 1.7, 5) },
+  { at: 0.99, value: new THREE.Vector3(2.55, 1.62, 4.76) },
   { at: 1, value: new THREE.Vector3(3.15, 1.58, 4.45) },
 ]
 
-const cameraLookKeys: Keyframe<THREE.Vector3>[] = [
+const cameraLookKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-0.2, 1.48, -0.02) },
-  { at: 0.13, value: new THREE.Vector3(-0.04, 1.7, 0.34) },
-  { at: 0.22, value: new THREE.Vector3(0.08, 1.48, 0.4) },
-  { at: 0.3, value: new THREE.Vector3(0.06, 0.73, -0.22) },
-  { at: 0.37, value: new THREE.Vector3(-0.38, 0.42, 0.25) },
-  { at: 0.45, value: new THREE.Vector3(0.28, 0.3, 0.22) },
-  { at: 0.53, value: new THREE.Vector3(0.02, 0.38, 0.16) },
-  { at: 0.63, value: new THREE.Vector3(0.02, 0.3, 0.12) },
-  { at: 0.74, value: new THREE.Vector3(0.02, 0.32, 0.14) },
-  { at: 0.85, value: new THREE.Vector3(0.02, 0.68, -1.4) },
-  { at: 0.93, value: new THREE.Vector3(0.14, 0.25, 0.46) },
+  { at: 0.12, value: new THREE.Vector3(-0.1, 1.7, 0.28) },
+  { at: 0.2, value: new THREE.Vector3(0, 1.55, 0.55), tension: 0.62 },
+  { at: 0.245, value: new THREE.Vector3(0.05, 1.35, 0.1) },
+  { at: 0.31, value: new THREE.Vector3(0, 0.78, -0.35) },
+  { at: 0.38, value: new THREE.Vector3(-0.35, 0.42, 0.35) },
+  { at: 0.44, value: new THREE.Vector3(-0.1, 0.42, 0.65) },
+  { at: 0.49, value: new THREE.Vector3(0, 0.38, 0.18) },
+  { at: 0.6, value: new THREE.Vector3(0, 0.4, 0.14) },
+  { at: 0.74, value: new THREE.Vector3(0, 0.32, 0.14), tension: 0.85 },
+  { at: 0.8, value: new THREE.Vector3(0, 0.42, -0.35) },
+  { at: 0.855, value: new THREE.Vector3(0, 0.68, -1.4) },
+  { at: 0.91, value: new THREE.Vector3(0, 0.58, -1.3) },
+  { at: 0.95, value: new THREE.Vector3(0.02, 0.42, 0.1), tension: 0.25 },
   { at: 1, value: new THREE.Vector3(0.02, 0.42, 0.47) },
 ]
 
-const cameraFovKeys: Keyframe<number>[] = [
+const cameraFovKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 32 },
-  { at: 0.13, value: 28 },
-  { at: 0.22, value: 27 },
-  { at: 0.3, value: 34 },
-  { at: 0.45, value: 35 },
+  { at: 0.14, value: 28 },
+  { at: 0.22, value: 27, tension: 0.55 },
+  { at: 0.31, value: 34 },
+  { at: 0.38, value: 32 },
+  { at: 0.45, value: 36 },
+  { at: 0.53, value: 34 },
   { at: 0.63, value: 31 },
-  { at: 0.74, value: 33 },
-  { at: 0.85, value: 36 },
+  { at: 0.74, value: 33, tension: 0.72 },
+  { at: 0.855, value: 36 },
   { at: 0.93, value: 34 },
   { at: 1, value: 31 },
 ]
@@ -82,7 +99,7 @@ const keyLightColorKeys: ColorKeyframe[] = [
   { at: 1, value: new THREE.Color(0xffc17d) },
 ]
 
-const keyLightPositionKeys: Keyframe<THREE.Vector3>[] = [
+const keyLightPositionKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-4.5, 6.2, 2.4) },
   { at: 0.18, value: new THREE.Vector3(-2.8, 5.4, 3.2) },
   { at: 0.32, value: new THREE.Vector3(3.4, 5.6, 3.6) },
@@ -92,29 +109,29 @@ const keyLightPositionKeys: Keyframe<THREE.Vector3>[] = [
   { at: 1, value: new THREE.Vector3(-3.4, 4.8, 3.2) },
 ]
 
-const ambientIntensityKeys: Keyframe<number>[] = [
+const ambientIntensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.035 }, { at: 0.2, value: 0.065 }, { at: 0.48, value: 0.11 },
   { at: 0.68, value: 0.09 }, { at: 0.84, value: 0.025 }, { at: 1, value: 0.025 },
 ]
 
-const fillIntensityKeys: Keyframe<number>[] = [
+const fillIntensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.34 }, { at: 0.16, value: 0.48 }, { at: 0.34, value: 0.42 },
   { at: 0.5, value: 0.64 }, { at: 0.68, value: 0.56 }, { at: 0.84, value: 0.2 },
   { at: 1, value: 0.18 },
 ]
 
-const keyIntensityKeys: Keyframe<number>[] = [
+const keyIntensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 2.0 }, { at: 0.16, value: 2.7 }, { at: 0.3, value: 3.0 },
   { at: 0.5, value: 2.55 }, { at: 0.68, value: 2.7 }, { at: 0.76, value: 2.25 },
   { at: 0.84, value: 1.85 }, { at: 1, value: 3.15 },
 ]
 
-const exposureKeys: Keyframe<number>[] = [
+const exposureKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.84 }, { at: 0.18, value: 0.92 }, { at: 0.5, value: 0.9 },
   { at: 0.74, value: 0.86 }, { at: 0.84, value: 0.78 }, { at: 1, value: 0.94 },
 ]
 
-const fogDensityKeys: Keyframe<number>[] = [
+const fogDensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.052 }, { at: 0.14, value: 0.042 }, { at: 0.28, value: 0.027 },
   { at: 0.37, value: 0.038 }, { at: 0.48, value: 0.021 }, { at: 0.74, value: 0.024 },
   { at: 0.85, value: 0.04 }, { at: 1, value: 0.03 },
@@ -320,8 +337,8 @@ export class JourneyWorld {
 
   private updateCamera(context: SequenceContext) {
     const pointerAmount = context.quality.reducedMotion ? 0 : 1
-    sampleVectorKeyframes(context.progress, cameraPositionKeys, this.cameraTarget)
-    sampleVectorKeyframes(context.progress, cameraLookKeys, this.desiredLook)
+    sampleVectorSplineKeyframes(context.progress, cameraPositionKeys, this.cameraTarget)
+    sampleVectorSplineKeyframes(context.progress, cameraLookKeys, this.desiredLook)
     if (context.quality.reducedMotion) {
       // Keep most chapters calm and wide in reduced-motion mode, but preserve
       // the authored three-quarter product angle once the final cut settles.
@@ -333,17 +350,16 @@ export class JourneyWorld {
     this.cameraTarget.sub(this.desiredLook).multiplyScalar(portraitFit).add(this.desiredLook)
     this.cameraTarget.x += context.pointer.x * 0.12 * pointerAmount
     this.cameraTarget.y += context.pointer.y * -0.06 * pointerAmount
-    dampVector(this.camera.position, this.cameraTarget, context.quality.reducedMotion ? 16 : 7, context.delta)
+    this.camera.position.copy(this.cameraTarget)
 
     this.desiredLook.x += context.pointer.x * 0.045 * pointerAmount
     this.desiredLook.y += context.pointer.y * -0.03 * pointerAmount
-    dampVector(this.lookTarget, this.desiredLook, context.quality.reducedMotion ? 16 : 7, context.delta)
+    this.lookTarget.copy(this.desiredLook)
     this.camera.lookAt(this.lookTarget)
 
-    const fov = sampleNumberKeyframes(context.progress, cameraFovKeys)
-    const nextFov = damp(this.camera.fov, fov, context.quality.reducedMotion ? 16 : 6, context.delta)
-    if (Math.abs(this.camera.fov - nextFov) > 0.001) {
-      this.camera.fov = nextFov
+    const fov = sampleNumberSplineKeyframes(context.progress, cameraFovKeys)
+    if (Math.abs(this.camera.fov - fov) > 0.001) {
+      this.camera.fov = fov
       this.camera.updateProjectionMatrix()
     }
   }
@@ -356,7 +372,7 @@ export class JourneyWorld {
 
     sampleColorKeyframes(p, keyLightColorKeys, this.keyLightColor)
     this.keyLight.color.copy(this.keyLightColor)
-    sampleVectorKeyframes(p, keyLightPositionKeys, this.lightTarget)
+    sampleVectorSplineKeyframes(p, keyLightPositionKeys, this.lightTarget)
     const proofQuiet = windowProgress(p, 0.68, 0.71) * (1 - windowProgress(p, 0.775, 0.81))
     if (!context.quality.reducedMotion) {
       this.lightTarget.x += Math.sin(this.elapsed * 0.12) * proofQuiet * 0.42
@@ -367,14 +383,14 @@ export class JourneyWorld {
 
     const ovenWarmth = windowProgress(p, 0.753, 0.829) * (1 - windowProgress(p, 0.925, 0.98))
     const finishWarmth = windowProgress(p, 0.89, 1)
-    this.ambientLight.intensity = damp(this.ambientLight.intensity, sampleNumberKeyframes(p, ambientIntensityKeys), 5, context.delta)
-    this.fillLight.intensity = damp(this.fillLight.intensity, sampleNumberKeyframes(p, fillIntensityKeys), 5, context.delta)
-    this.keyLight.intensity = damp(this.keyLight.intensity, sampleNumberKeyframes(p, keyIntensityKeys), 5, context.delta)
-    this.ovenLight.intensity = damp(this.ovenLight.intensity, ovenWarmth * 2.55, 8, context.delta)
-    this.breadLight.intensity = damp(this.breadLight.intensity, finishWarmth * 2.25, 6, context.delta)
-    this.renderer.toneMappingExposure = damp(this.renderer.toneMappingExposure, sampleNumberKeyframes(p, exposureKeys), 4, context.delta)
+    this.ambientLight.intensity = sampleNumberSplineKeyframes(p, ambientIntensityKeys)
+    this.fillLight.intensity = sampleNumberSplineKeyframes(p, fillIntensityKeys)
+    this.keyLight.intensity = sampleNumberSplineKeyframes(p, keyIntensityKeys)
+    this.ovenLight.intensity = ovenWarmth * 2.55
+    this.breadLight.intensity = finishWarmth * 2.25
+    this.renderer.toneMappingExposure = sampleNumberSplineKeyframes(p, exposureKeys)
     if (this.scene.fog instanceof THREE.FogExp2) {
-      this.scene.fog.density = damp(this.scene.fog.density, sampleNumberKeyframes(p, fogDensityKeys), 5, context.delta)
+      this.scene.fog.density = sampleNumberSplineKeyframes(p, fogDensityKeys)
     }
 
     if (this.bloom) {
