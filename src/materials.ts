@@ -126,6 +126,24 @@ function drawStone(size: number, albedo: CanvasRenderingContext2D, height: Canva
     height.fillStyle = `rgba(${72 + Math.round(random() * 28)},${72 + Math.round(random() * 28)},${72 + Math.round(random() * 28)},0.5)`
     height.fillRect(x, y, Math.max(1, radius), Math.max(1, radius))
   }
+  for (let fracture = 0; fracture < 15; fracture += 1) {
+    const x = random() * size
+    const y = random() * size
+    const length = size * (0.025 + random() * 0.075)
+    const bend = (random() - 0.5) * length * 0.45
+    albedo.strokeStyle = `rgba(45,42,36,${0.025 + random() * 0.035})`
+    albedo.lineWidth = 0.45 + random() * 0.55
+    albedo.beginPath()
+    albedo.moveTo(x, y)
+    albedo.quadraticCurveTo(x + length * 0.5, y + bend, x + length, y + bend * 0.35)
+    albedo.stroke()
+    height.strokeStyle = 'rgba(82,82,82,0.24)'
+    height.lineWidth = 0.55
+    height.beginPath()
+    height.moveTo(x, y)
+    height.quadraticCurveTo(x + length * 0.5, y + bend, x + length, y + bend * 0.35)
+    height.stroke()
+  }
 }
 
 function drawFlour(size: number, albedo: CanvasRenderingContext2D, height: CanvasRenderingContext2D, roughness: CanvasRenderingContext2D) {

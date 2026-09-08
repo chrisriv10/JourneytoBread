@@ -423,6 +423,54 @@ function flourPointLayer(quality: QualityConfig, count: number, minSize: number,
   return { points, positions, alphas } satisfies FlourPointLayer
 }
 
+function flourMoundGeometry(quality: QualityConfig, seed: number) {
+  const radialSegments = quality.mobile ? 28 : 48
+  const rings = quality.mobile ? 7 : 11
+  const localRandom = createRandom(seed)
+  const perimeter = Array.from({ length: radialSegments }, () => 0.91 + localRandom() * 0.17)
+  const positions: number[] = [0, 0.34, 0]
+  const uvs: number[] = [0.5, 0.5]
+  const indices: number[] = []
+  for (let ringIndex = 1; ringIndex <= rings; ringIndex += 1) {
+    const radial = ringIndex / rings
+    for (let segment = 0; segment < radialSegments; segment += 1) {
+      const angle = segment / radialSegments * Math.PI * 2
+      const irregularRadius = radial * T.MathUtils.lerp(1, perimeter[segment], Math.pow(radial, 1.5))
+      const x = Math.cos(angle) * irregularRadius * 0.96
+      const z = Math.sin(angle) * irregularRadius * 0.7
+      const broadSlope = Math.pow(Math.max(0, 1 - radial), 0.72) * 0.34
+      const granular = (
+        Math.sin(angle * 5.1 + radial * 8.2)
+        + Math.sin(angle * 9.3 - radial * 5.4) * 0.5
+      ) * 0.008 * (1 - radial)
+      positions.push(x, Math.max(0, broadSlope + granular), z)
+      uvs.push(0.5 + x * 0.5, 0.5 + z / 1.4)
+    }
+  }
+  for (let segment = 0; segment < radialSegments; segment += 1) {
+    const next = (segment + 1) % radialSegments
+    indices.push(0, 1 + next, 1 + segment)
+  }
+  for (let ringIndex = 1; ringIndex < rings; ringIndex += 1) {
+    const innerStart = 1 + (ringIndex - 1) * radialSegments
+    const outerStart = innerStart + radialSegments
+    for (let segment = 0; segment < radialSegments; segment += 1) {
+      const next = (segment + 1) % radialSegments
+      const a = innerStart + segment
+      const b = innerStart + next
+      const c = outerStart + segment
+      const d = outerStart + next
+      indices.push(a, b, c, b, d, c)
+    }
+  }
+  const geometry = new T.BufferGeometry()
+  geometry.setAttribute('position', new T.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2))
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+  return geometry
+}
+
 class FlourSystem {
   readonly group = new T.Group()
   readonly pile = new T.Group()
@@ -430,6 +478,7 @@ class FlourSystem {
   private readonly grinding: FlourPointLayer
   private readonly stream: FlourPointLayer
   private readonly impact: FlourPointLayer
+  private readonly pileVisibility: Visibility
   private readonly grindingParticles: FlourParticle[] = []
   private readonly streamParticles: FlourParticle[] = []
   private readonly impactParticles: FlourParticle[] = []
@@ -443,8 +492,8 @@ class FlourSystem {
     const streamCount = Math.floor(quality.flourCount * 0.58)
     const impactCount = Math.max(120, quality.flourCount - streamCount - grindingCount)
     this.grinding = flourPointLayer(quality, grindingCount, 0.2, 0.74)
-    this.stream = flourPointLayer(quality, streamCount, 0.32, 1.28)
-    this.impact = flourPointLayer(quality, impactCount, 0.26, 1.08)
+    this.stream = flourPointLayer(quality, streamCount, 0.42, 1.56)
+    this.impact = flourPointLayer(quality, impactCount, 0.42, 1.62)
     this.group.add(this.grinding.points, this.stream.points, this.impact.points)
 
     for (let index = 0; index < grindingCount; index += 1) {
@@ -485,8 +534,8 @@ class FlourSystem {
     hazeCanvas.width = hazeCanvas.height = 96
     const hazeContext = hazeCanvas.getContext('2d')!
     const hazeGradient = hazeContext.createRadialGradient(44, 51, 3, 48, 48, 47)
-    hazeGradient.addColorStop(0, 'rgba(255,248,230,0.36)')
-    hazeGradient.addColorStop(0.38, 'rgba(246,235,211,0.17)')
+    hazeGradient.addColorStop(0, 'rgba(255,248,230,0.7)')
+    hazeGradient.addColorStop(0.38, 'rgba(246,235,211,0.29)')
     hazeGradient.addColorStop(1, 'rgba(238,224,198,0)')
     hazeContext.fillStyle = hazeGradient
     hazeContext.fillRect(0, 0, 96, 96)
@@ -509,18 +558,7 @@ class FlourSystem {
       this.group.add(sprite)
       this.haze.push({ sprite, material, phase: random() * Math.PI * 2, near: random(), scale: 0.62 + random() * 0.68 })
     }
-    const pileGeometry = new T.SphereGeometry(1, 48, 24)
-    const pos = pileGeometry.attributes.position
-    for (let i = 0; i < pos.count; i += 1) {
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
-      const radius = Math.sqrt(x * x + z * z)
-      const angle = Math.atan2(z, x)
-      const perimeter = 1 + Math.sin(angle * 5 + 0.8) * 0.065 + Math.sin(angle * 9) * 0.028
-      const mound = Math.pow(Math.max(0, 1 - radius * radius), 0.42) * 0.27
-      const granular = Math.sin(x * 17 + z * 13) * Math.cos(z * 21 - x * 7) * 0.012
-      pos.setXYZ(i, x * 0.96 * perimeter, y < 0 ? 0 : Math.max(0, mound + granular), z * 0.68 * perimeter)
-    }
-    pileGeometry.computeVertexNormals()
+    const pileGeometry = flourMoundGeometry(quality, 7301)
     const pileMaterial = mat(PALETTE.flour, quality, 'flour', { roughness: 1 })
     const mainMound = mesh(pileGeometry, pileMaterial, this.pile)
     mainMound.name = 'flour-pile-mound'
@@ -533,6 +571,7 @@ class FlourSystem {
     this.pile.name = 'flour-pile'
     this.group.add(this.pile)
     dust(this.pile, quality, quality.mobile ? 34 : 58, 1.12, 0.008)
+    this.pileVisibility = new Visibility(this.pile)
     this.pileShadow = contactShadow(this.group, 1.8, 1.15)
     this.pileShadow.material.opacity = 0.19
   }
@@ -552,12 +591,13 @@ class FlourSystem {
     const atmosphere = windowProgress(p, 0.342, 0.418) * (1 - windowProgress(p, 0.463, 0.505))
     const transitionVeil = windowProgress(p, 0.397, 0.432) * (1 - windowProgress(p, 0.448, 0.486))
     const pileGrowth = windowProgress(p, 0.318, 0.413, (value) => value * value * (2 - value))
-    const pilePresence = pileGrowth * (1 - windowProgress(p, 0.44, 0.478))
+    const pileFade = 1 - windowProgress(p, 0.422, 0.452)
+    const pilePresence = pileGrowth * pileFade
     this.group.visible = p >= 0.27 && p <= 0.51
     this.pile.position.copy(receivingPoint)
     const pileScale = Math.max(0.001, Math.cbrt(pileGrowth))
-    this.pile.scale.set(pileScale * 0.58, pileScale * 0.62, pileScale * 0.58)
-    this.pile.visible = pilePresence > 0.0001
+    this.pile.scale.set(pileScale * 0.44, pileScale * 0.55, pileScale * 0.44)
+    this.pileVisibility.set(pileFade)
     this.pileShadow.position.set(receivingPoint.x, receivingPoint.y + 0.002, receivingPoint.z)
     this.pileShadow.scale.setScalar(Math.max(0.001, Math.sqrt(pileGrowth) * 0.58))
     this.pileShadow.visible = this.pile.visible
@@ -596,7 +636,7 @@ class FlourSystem {
       temp.z += Math.cos(particle.phase * 17 + fall * 5.4) * particle.turbulence * fall * 0.62
       const edgeFade = windowProgress(fall, 0, 0.08) * (1 - windowProgress(fall, 0.9, 1))
       this.stream.positions.setXYZ(index, temp.x, temp.y, temp.z)
-      this.stream.alphas.setX(index, active * streamPresence * edgeFade * (0.18 + particle.weight * 0.46))
+      this.stream.alphas.setX(index, active * streamPresence * edgeFade * (0.28 + particle.weight * 0.58))
     })
     this.stream.positions.needsUpdate = this.stream.alphas.needsUpdate = true
 
@@ -604,17 +644,18 @@ class FlourSystem {
     this.impactParticles.forEach((particle, index) => {
       const cycle = ((particle.phase + p * (10 + particle.weight * 4)) % 1 + 1) % 1
       const rise = Math.sin(cycle * Math.PI)
-      const radial = particle.radius * (0.035 + impactBuild * 0.48) * Math.sqrt(cycle)
+      const depthPass = transitionVeil * Math.pow(particle.near, 1.55)
+      const radial = particle.radius * (0.035 + impactBuild * 0.62 + depthPass * 0.82) * Math.sqrt(cycle)
       const drift = Math.sin(time * 0.2 + particle.phase * 11) * particle.turbulence * atmosphere
       this.impact.positions.setXYZ(
         index,
         receivingPoint.x + Math.cos(particle.angle) * radial + drift,
-        receivingPoint.y + 0.014 + rise * (0.035 + impactBuild * (0.1 + particle.near * 0.2)),
-        receivingPoint.z + Math.sin(particle.angle) * radial * 0.68 + drift * 0.6,
+        receivingPoint.y + 0.014 + rise * (0.04 + impactBuild * (0.16 + particle.near * 0.3)) + depthPass * (0.12 + particle.near * 0.76),
+        receivingPoint.z + Math.sin(particle.angle) * radial * 0.68 + drift * 0.6 + depthPass * 1.38,
       )
       const edgeFade = windowProgress(cycle, 0, 0.12) * (1 - windowProgress(cycle, 0.78, 1))
       const activation = impactBuild >= particle.delay * 0.82 ? 1 : 0
-      this.impact.alphas.setX(index, activation * impactPresence * edgeFade * (0.045 + particle.weight * 0.2))
+      this.impact.alphas.setX(index, activation * impactPresence * edgeFade * (0.09 + particle.weight * 0.34 + depthPass * 0.11))
     })
     this.impact.positions.needsUpdate = this.impact.alphas.needsUpdate = true
 
@@ -623,8 +664,8 @@ class FlourSystem {
       const nearPass = Math.pow(entry.near, 1.6)
       const isVeil = index < veilCount
       const opacity = isVeil
-        ? Math.max(atmosphere * (0.055 + nearPass * 0.08), transitionVeil * (0.22 + nearPass * 0.12))
-        : atmosphere * (0.07 + nearPass * 0.13)
+        ? Math.max(atmosphere * (0.075 + nearPass * 0.1), transitionVeil * (0.32 + nearPass * 0.17))
+        : atmosphere * (0.09 + nearPass * 0.16)
       entry.sprite.visible = opacity > 0.003
       entry.material.opacity = opacity
       entry.sprite.position.set(
@@ -632,7 +673,7 @@ class FlourSystem {
         receivingPoint.y + 0.18 + nearPass * 0.62 + Math.cos(entry.phase + time * (0.12 + nearPass * 0.06)) * 0.09,
         receivingPoint.z + 0.1 + nearPass * 1.62 + Math.sin(index * 1.7) * 0.08,
       )
-      const scale = entry.scale * (0.52 + atmosphere * 0.92 + transitionVeil * 0.78) * (1 + nearPass * 0.72)
+      const scale = entry.scale * (0.52 + atmosphere * 1.05 + transitionVeil * 1.12) * (1 + nearPass * 0.82)
       entry.sprite.scale.set(scale, scale * (0.48 + (index % 3) * 0.09), 1)
       entry.material.rotation = entry.phase * 0.18 + time * (index % 2 === 0 ? 0.018 : -0.013)
     })
@@ -869,18 +910,52 @@ function mill(quality: QualityConfig) {
     const turn = angle + 0.2 + Math.sin(i * 1.7) * 0.035
     rod(new T.Vector3(Math.cos(angle) * 0.29, 0.224, Math.sin(angle) * 0.29), new T.Vector3(Math.cos(turn) * 1.08, 0.224, Math.sin(turn) * 1.08), 0.008, grooveMaterial, rotor)
   }
+  const chiselDark = mat(0x625f56, quality, 'stone', { roughness: 0.99 })
+  const chiselLight = mat(0xc0bcae, quality, 'stone', { roughness: 0.98 })
+  for (let index = 0; index < 11; index += 1) {
+    const angle = index / 11 * Math.PI * 2 + 0.13
+    const radius = 1.218 + Math.sin(index * 2.4) * 0.008
+    const mark = mesh(
+      new T.BoxGeometry(0.11 + (index % 3) * 0.035, 0.018 + (index % 2) * 0.008, 0.016),
+      index % 4 === 0 ? chiselLight : chiselDark,
+      rotor,
+      Math.cos(angle) * radius,
+      -0.02 + Math.sin(index * 1.7) * 0.105,
+      Math.sin(angle) * radius,
+    )
+    mark.rotation.y = Math.PI / 2 - angle
+    mark.rotation.z = Math.sin(index * 2.1) * 0.16
+    mark.castShadow = false
+  }
   rod(new T.Vector3(0, 0.74, 0), new T.Vector3(0, 1.78, 0), 0.052, iron, group)
   rod(new T.Vector3(0, 1.1, 0), new T.Vector3(0.88, 1.1, 0), 0.052, iron, rotor)
   rod(new T.Vector3(0.88, 1.08, 0), new T.Vector3(0.88, 1.5, 0), 0.09, mat(0x8e5a31, quality, 'wood', { roughness: 0.83 }), rotor)
   const funnelWood = mat(0xae7949, quality, 'wood', { side: T.DoubleSide, roughness: 0.86, emissive: 0x2b1609, emissiveIntensity: 0.05 })
-  const funnel = mesh(new T.CylinderGeometry(0.49, 0.14, 0.56, 4, 1, true), funnelWood, group, 0, 1.35, 0)
-  funnel.rotation.y = Math.PI / 4 + 0.16
-  ring(0.49, 0.023, mat(0x704629, quality, 'wood', { roughness: 0.9 }), group, 1.63)
+  const hopperGroup = new T.Group()
+  hopperGroup.position.y = 1.35
+  hopperGroup.rotation.y = Math.PI / 4 + 0.16
+  group.add(hopperGroup)
+  mesh(new T.CylinderGeometry(0.49, 0.14, 0.56, 4, 1, true), funnelWood, hopperGroup)
+  const hopperEdge = mat(0x704629, quality, 'wood', { roughness: 0.92, bumpScale: 0.01 })
+  const hopperSeam = mat(0x4e2f1d, quality, undefined, { roughness: 0.96 })
+  for (const side of [-1, 1]) {
+    mesh(new T.BoxGeometry(0.78, 0.045, 0.045), hopperEdge, hopperGroup, 0, 0.29, side * 0.39)
+    mesh(new T.BoxGeometry(0.045, 0.045, 0.78), hopperEdge, hopperGroup, side * 0.39, 0.29, 0)
+  }
+  for (let corner = 0; corner < 4; corner += 1) {
+    const angle = Math.PI / 4 + corner * Math.PI / 2
+    rod(
+      new T.Vector3(Math.cos(angle) * 0.47, 0.27, Math.sin(angle) * 0.47),
+      new T.Vector3(Math.cos(angle) * 0.13, -0.27, Math.sin(angle) * 0.13),
+      0.008,
+      hopperSeam,
+      hopperGroup,
+    )
+  }
   ring(0.145, 0.016, mat(0x5e3c28, quality, undefined, { roughness: 0.92 }), group, 1.07)
-  mesh(new T.CylinderGeometry(0.28, 0.28, 0.03, 24), mat(0x8b5a34, quality, 'wood'), group, 0, 1.53, 0)
   const chute = new T.Group()
-  chute.position.set(0.25, 0.3, 1.15)
-  chute.rotation.x = 0.18
+  chute.position.set(0.25, 0.36, 1.15)
+  chute.rotation.x = 0.14
   group.add(chute)
   const chuteWood = mat(0x936039, quality, 'wood', { roughness: 0.88, bumpScale: 0.009 })
   const chuteEdge = mat(0x6d4025, quality, 'wood', { roughness: 0.92, bumpScale: 0.008 })
@@ -889,6 +964,19 @@ function mill(quality: QualityConfig) {
   mesh(new T.BoxGeometry(0.042, 0.105, 0.77), chuteEdge, chute, 0.205, 0.052, 0)
   const chuteMouth = mesh(new T.BoxGeometry(0.37, 0.075, 0.038), mat(0x2f1c12, quality, undefined, { roughness: 0.98 }), chute, 0, 0.025, 0.4)
   chuteMouth.castShadow = false
+  const flourTrace = mat(0xe7d9bd, quality, 'flour', { transparent: true, opacity: 0.42, depthWrite: false })
+  for (let index = 0; index < 3; index += 1) {
+    const trace = mesh(
+      new T.BoxGeometry(0.025 + index * 0.006, 0.004, 0.18 + index * 0.035),
+      flourTrace,
+      chute,
+      (index - 1) * 0.075,
+      0.032 + index * 0.001,
+      0.18 + index * 0.035,
+    )
+    trace.rotation.y = (index - 1) * 0.07
+    trace.castShadow = trace.receiveShadow = false
+  }
   const outlet = new T.Vector3(0, 0.015, 0.43).applyEuler(chute.rotation).add(chute.position)
   const shadow = contactShadow(group, 2.85, 2.45)
   shadow.scale.set(1.08, 1, 1)
@@ -1368,8 +1456,8 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const flourish = currentQuality.reducedMotion ? 0.35 : 1
       const extract = windowProgress(p, 0.082, 0.17)
       const feed = windowProgress(p, 0.225, 0.292, (value) => value * value)
+      const feedScale = windowProgress(p, 0.215, 0.279)
       const millEnter = windowProgress(p, 0.182, 0.242)
-      const millExit = windowProgress(p, 0.43, 0.47)
       const fieldRetreat = windowProgress(p, 0.138, 0.285)
       field.position.set(-fieldRetreat * 0.08, 0, -fieldRetreat * 2.3)
       visibility.field.set(1 - windowProgress(p, 0.19, 0.298))
@@ -1400,7 +1488,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       hopper.set(millModel.group.position.x, 1.21, millModel.group.position.z)
       if (feed > 0) {
         arcPosition(kernelFocus, hopper, feed, 0.65 * flourish, kernel.position)
-        kernel.scale.setScalar(T.MathUtils.lerp(0.75, 0.07, feed))
+        kernel.scale.setScalar(T.MathUtils.lerp(0.75, 0.07, feedScale))
         kernel.rotation.z += feed * 1.6
       }
       // The only remaining fade occurs after the tiny kernel is inside the
@@ -1411,11 +1499,11 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       flourReceivingPoint.set(outlet.x + 0.018, 0.006, outlet.z + 0.055)
       visibility.top.set(windowProgress(p, 0.205, 0.255) * (1 - windowProgress(p, 0.8, 0.845)))
 
-      const bowlReveal = windowProgress(p, 0.432, 0.492)
+      const bowlReveal = windowProgress(p, 0.423, 0.482)
       const bowlRecede = windowProgress(p, 0.592, 0.66)
       // The dough fills the foreground as the camera follows it out; finish the
       // bowl fade while it is still occluded instead of leaving a ghostly rim.
-      const bowlPresence = windowProgress(p, 0.437, 0.48) * (1 - windowProgress(p, 0.602, 0.633))
+      const bowlPresence = windowProgress(p, 0.427, 0.47) * (1 - windowProgress(p, 0.602, 0.633))
       bowlModel.group.position.set(0.32 * (1 - bowlReveal) - bowlRecede * 0.28, 0.43 - bowlRecede * 0.05, 0.18 - (1 - bowlReveal) * 2.6 - bowlRecede * 1.45)
       visibility.bowl.set(bowlPresence)
       bowlShadow.position.set(bowlModel.group.position.x, 0.004, bowlModel.group.position.z)
@@ -1423,7 +1511,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       bowlShadow.visible = bowlShadow.material.opacity > 0.002
       bowlTarget.copy(bowlModel.group.position).add(temp.set(0, 0.16, 0))
       flour.update(p, ambient, outlet, flourReceivingPoint, millModel.group.position, millModel.rotor.rotation.y)
-      const fill = windowProgress(p, 0.432, 0.49)
+      const fill = windowProgress(p, 0.434, 0.49)
       const mixing = windowProgress(p, 0.502, 0.575)
       const dryToWet = windowProgress(p, 0.502, 0.542)
       const flourSurfaceOpacity = fill * bowlPresence * (1 - dryToWet)
