@@ -362,7 +362,13 @@ type FlourPointLayer = {
   alphas: T.BufferAttribute
 }
 
-function flourPointLayer(quality: QualityConfig, count: number, minSize: number, maxSize: number) {
+function flourPointLayer(
+  quality: QualityConfig,
+  count: number,
+  minSize: number,
+  maxSize: number,
+  tint: T.ColorRepresentation,
+) {
   const geometry = new T.BufferGeometry()
   const positions = new T.BufferAttribute(new Float32Array(count * 3), 3)
   const alphas = new T.BufferAttribute(new Float32Array(count), 1)
@@ -380,7 +386,7 @@ function flourPointLayer(quality: QualityConfig, count: number, minSize: number,
     transparent: true,
     depthWrite: false,
     uniforms: {
-      tint: { value: new T.Color(0xf4ead5) },
+      tint: { value: new T.Color(tint) },
       pixelRatio: { value: quality.dpr },
     },
     vertexShader: `
@@ -410,8 +416,8 @@ function flourPointLayer(quality: QualityConfig, count: number, minSize: number,
           + sin(angle * 9.0 - vShape * 4.7) * 0.055;
         float radius = length(point) * 2.0 / irregularEdge;
         if (radius > 1.0) discard;
-        float feather = 1.0 - smoothstep(0.34, 1.0, radius);
-        float granular = 0.88 + sin((point.x - point.y + vShape) * 31.0) * 0.12;
+        float feather = 1.0 - smoothstep(0.28, 1.0, radius);
+        float granular = 0.94 + sin((point.x - point.y + vShape) * 31.0) * 0.06;
         gl_FragColor = vec4(tint, vAlpha * feather * granular);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -430,6 +436,7 @@ function flourMoundGeometry(quality: QualityConfig, seed: number) {
   const perimeter = Array.from({ length: radialSegments }, () => 0.91 + localRandom() * 0.17)
   const positions: number[] = [0, 0.34, 0]
   const uvs: number[] = [0.5, 0.5]
+  const colors: number[] = [1, 0.975, 0.91]
   const indices: number[] = []
   for (let ringIndex = 1; ringIndex <= rings; ringIndex += 1) {
     const radial = ringIndex / rings
@@ -445,6 +452,8 @@ function flourMoundGeometry(quality: QualityConfig, seed: number) {
       ) * 0.008 * (1 - radial)
       positions.push(x, Math.max(0, broadSlope + granular), z)
       uvs.push(0.5 + x * 0.5, 0.5 + z / 1.4)
+      const light = 0.9 + (1 - radial) * 0.065 + Math.sin(angle * 4.7 + radial * 7.2) * 0.018
+      colors.push(light, light * 0.976, light * 0.92)
     }
   }
   for (let segment = 0; segment < radialSegments; segment += 1) {
@@ -466,6 +475,7 @@ function flourMoundGeometry(quality: QualityConfig, seed: number) {
   const geometry = new T.BufferGeometry()
   geometry.setAttribute('position', new T.Float32BufferAttribute(positions, 3))
   geometry.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2))
+  geometry.setAttribute('color', new T.Float32BufferAttribute(colors, 3))
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
   return geometry
@@ -489,11 +499,11 @@ class FlourSystem {
   constructor(quality: QualityConfig) {
     this.group.name = 'milling-output'
     const grindingCount = quality.mobile ? 56 : quality.tier === 'high' ? 150 : 96
-    const streamCount = Math.floor(quality.flourCount * 0.58)
+    const streamCount = Math.floor(quality.flourCount * 0.64)
     const impactCount = Math.max(120, quality.flourCount - streamCount - grindingCount)
-    this.grinding = flourPointLayer(quality, grindingCount, 0.2, 0.74)
-    this.stream = flourPointLayer(quality, streamCount, 0.42, 1.56)
-    this.impact = flourPointLayer(quality, impactCount, 0.42, 1.62)
+    this.grinding = flourPointLayer(quality, grindingCount, 0.26, 0.86, 0xcab797)
+    this.stream = flourPointLayer(quality, streamCount, 0.38, 1.38, 0xe4d5b9)
+    this.impact = flourPointLayer(quality, impactCount, 0.4, 1.48, 0xd8c5a7)
     this.group.add(this.grinding.points, this.stream.points, this.impact.points)
 
     for (let index = 0; index < grindingCount; index += 1) {
@@ -559,7 +569,7 @@ class FlourSystem {
       this.haze.push({ sprite, material, phase: random() * Math.PI * 2, near: random(), scale: 0.62 + random() * 0.68 })
     }
     const pileGeometry = flourMoundGeometry(quality, 7301)
-    const pileMaterial = mat(PALETTE.flour, quality, 'flour', { roughness: 1 })
+    const pileMaterial = mat(0xe7dcc4, quality, 'flour', { roughness: 1, bumpScale: 0.004, vertexColors: true })
     const mainMound = mesh(pileGeometry, pileMaterial, this.pile)
     mainMound.name = 'flour-pile-mound'
     const shoulder = mesh(pileGeometry.clone(), pileMaterial, this.pile, -0.27, 0.002, 0.08)
@@ -614,7 +624,7 @@ class FlourSystem {
         millCenter.y + 0.405 + (particle.near - 0.5) * 0.07 + Math.sin(particle.phase + stoneRotation) * 0.016,
         millCenter.z + Math.sin(angle) * radius,
       )
-      this.grinding.alphas.setX(index, grinding * (0.025 + particle.weight * 0.12))
+      this.grinding.alphas.setX(index, grinding * (0.04 + particle.weight * 0.17))
     })
     this.grinding.positions.needsUpdate = this.grinding.alphas.needsUpdate = true
 
@@ -636,7 +646,7 @@ class FlourSystem {
       temp.z += Math.cos(particle.phase * 17 + fall * 5.4) * particle.turbulence * fall * 0.62
       const edgeFade = windowProgress(fall, 0, 0.08) * (1 - windowProgress(fall, 0.9, 1))
       this.stream.positions.setXYZ(index, temp.x, temp.y, temp.z)
-      this.stream.alphas.setX(index, active * streamPresence * edgeFade * (0.28 + particle.weight * 0.58))
+      this.stream.alphas.setX(index, active * streamPresence * edgeFade * (0.24 + particle.weight * 0.48))
     })
     this.stream.positions.needsUpdate = this.stream.alphas.needsUpdate = true
 
@@ -1495,6 +1505,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       // opaque feed throat, so reverse scrubbing reads as physical emergence.
       const grind = windowProgress(p, 0.284, 0.405, (value) => value * value * (2 - value))
       millModel.rotor.rotation.y = grind * Math.PI * 9 + Math.sin(ambient * 0.35) * 0.014 * bell(grind)
+      millModel.rotor.position.y = 0.62 + Math.sin(grind * Math.PI * 18) * bell(grind) * 0.0045 * flourish
       outlet.copy(millModel.outlet).add(millModel.group.position)
       flourReceivingPoint.set(outlet.x + 0.018, 0.006, outlet.z + 0.055)
       visibility.top.set(windowProgress(p, 0.205, 0.255) * (1 - windowProgress(p, 0.8, 0.845)))
