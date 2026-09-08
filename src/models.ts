@@ -501,20 +501,23 @@ class FlourSystem {
     const grindingCount = quality.mobile ? 56 : quality.tier === 'high' ? 150 : 96
     const streamCount = Math.floor(quality.flourCount * 0.64)
     const impactCount = Math.max(120, quality.flourCount - streamCount - grindingCount)
-    this.grinding = flourPointLayer(quality, grindingCount, 0.26, 0.86, 0xcab797)
+    this.grinding = flourPointLayer(quality, grindingCount, 0.4, 1.12, 0xd9c49d)
     this.stream = flourPointLayer(quality, streamCount, 0.38, 1.38, 0xe4d5b9)
     this.impact = flourPointLayer(quality, impactCount, 0.4, 1.48, 0xd8c5a7)
     this.group.add(this.grinding.points, this.stream.points, this.impact.points)
 
     for (let index = 0; index < grindingCount; index += 1) {
       this.grindingParticles.push({
-        angle: Math.PI * (0.18 + random() * 0.64),
-        radius: 0.46 + random() * 0.72,
+        angle: Math.PI * (0.3 + random() * 0.4),
+        // Keep the first dust tight to the exposed front half of the stone gap.
+        // Particles inside the stone radius were physically plausible but almost
+        // entirely occluded, so the grinding beat did not read on screen.
+        radius: 1.155 + random() * 0.115,
         delay: random(),
         phase: random() * Math.PI * 2,
-        weight: Math.pow(random(), 1.8),
+        weight: Math.pow(random(), 0.95),
         near: random(),
-        turbulence: 0.004 + random() * 0.012,
+        turbulence: 0.003 + random() * 0.009,
       })
     }
     for (let index = 0; index < streamCount; index += 1) {
@@ -583,7 +586,7 @@ class FlourSystem {
     dust(this.pile, quality, quality.mobile ? 34 : 58, 1.12, 0.008)
     this.pileVisibility = new Visibility(this.pile)
     this.pileShadow = contactShadow(this.group, 1.8, 1.15)
-    this.pileShadow.material.opacity = 0.19
+    this.pileShadow.material.opacity = 0.27
   }
 
   update(
@@ -594,13 +597,13 @@ class FlourSystem {
     millCenter: T.Vector3,
     stoneRotation: number,
   ) {
-    const grinding = windowProgress(p, 0.276, 0.316) * (1 - windowProgress(p, 0.41, 0.442))
-    const streamBuild = windowProgress(p, 0.3, 0.354, (value) => value * value * (2 - value))
+    const grinding = windowProgress(p, 0.274, 0.31) * (1 - windowProgress(p, 0.41, 0.442))
+    const streamBuild = windowProgress(p, 0.304, 0.356, (value) => value * value * (2 - value))
     const streamPresence = streamBuild * (1 - windowProgress(p, 0.416, 0.447))
-    const impactBuild = windowProgress(p, 0.322, 0.405)
+    const impactBuild = windowProgress(p, 0.326, 0.405)
     const atmosphere = windowProgress(p, 0.342, 0.418) * (1 - windowProgress(p, 0.463, 0.505))
     const transitionVeil = windowProgress(p, 0.397, 0.432) * (1 - windowProgress(p, 0.448, 0.486))
-    const pileGrowth = windowProgress(p, 0.318, 0.413, (value) => value * value * (2 - value))
+    const pileGrowth = windowProgress(p, 0.326, 0.413, (value) => value * value * (2 - value))
     const pileFade = 1 - windowProgress(p, 0.422, 0.452)
     const pilePresence = pileGrowth * pileFade
     this.group.visible = p >= 0.27 && p <= 0.51
@@ -608,23 +611,27 @@ class FlourSystem {
     const pileScale = Math.max(0.001, Math.cbrt(pileGrowth))
     this.pile.scale.set(pileScale * 0.44, pileScale * 0.55, pileScale * 0.44)
     this.pileVisibility.set(pileFade)
-    this.pileShadow.position.set(receivingPoint.x, receivingPoint.y + 0.002, receivingPoint.z)
-    this.pileShadow.scale.setScalar(Math.max(0.001, Math.sqrt(pileGrowth) * 0.58))
+    this.pileShadow.position.set(receivingPoint.x - 0.018, receivingPoint.y + 0.002, receivingPoint.z - 0.032)
+    const pileShadowScale = Math.max(0.001, Math.sqrt(pileGrowth) * 0.56)
+    this.pileShadow.scale.set(pileShadowScale * 1.04, pileShadowScale * 0.9, 1)
     this.pileShadow.visible = this.pile.visible
-    this.pileShadow.material.opacity = pilePresence * 0.19
+    this.pileShadow.material.opacity = pilePresence * 0.27
     if (!this.group.visible) return
 
     this.grindingParticles.forEach((particle, index) => {
-      const angle = particle.angle + stoneRotation * (0.23 + particle.weight * 0.12)
+      // Stay near the visible feed/output side of the seam. The stone-driven
+      // phase keeps the dust alive without making it orbit like sparks.
+      const angle = particle.angle + Math.sin(stoneRotation * 0.42 + particle.phase) * (0.035 + particle.weight * 0.085)
       const flutter = Math.sin(time * (0.8 + particle.weight * 0.7) + particle.phase) * particle.turbulence
-      const radius = particle.radius + flutter
+      const radius = particle.radius + flutter + grinding * particle.weight * 0.045
+      const lift = grinding * particle.weight * 0.052
       this.grinding.positions.setXYZ(
         index,
         millCenter.x + Math.cos(angle) * radius,
-        millCenter.y + 0.405 + (particle.near - 0.5) * 0.07 + Math.sin(particle.phase + stoneRotation) * 0.016,
+        millCenter.y + 0.408 + lift + (particle.near - 0.5) * 0.038 + Math.sin(particle.phase + stoneRotation) * 0.012,
         millCenter.z + Math.sin(angle) * radius,
       )
-      this.grinding.alphas.setX(index, grinding * (0.04 + particle.weight * 0.17))
+      this.grinding.alphas.setX(index, grinding * (0.075 + particle.weight * 0.25))
     })
     this.grinding.positions.needsUpdate = this.grinding.alphas.needsUpdate = true
 
@@ -1466,7 +1473,8 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const flourish = currentQuality.reducedMotion ? 0.35 : 1
       const extract = windowProgress(p, 0.082, 0.17)
       const feed = windowProgress(p, 0.225, 0.292, (value) => value * value)
-      const feedScale = windowProgress(p, 0.215, 0.279)
+      const feedScale = windowProgress(p, 0.215, 0.289, (value) => value * value * (3 - 2 * value))
+      const throatOcclusion = windowProgress(p, 0.285, 0.295, (value) => value * value)
       const millEnter = windowProgress(p, 0.182, 0.242)
       const fieldRetreat = windowProgress(p, 0.138, 0.285)
       field.position.set(-fieldRetreat * 0.08, 0, -fieldRetreat * 2.3)
@@ -1498,7 +1506,8 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       hopper.set(millModel.group.position.x, 1.21, millModel.group.position.z)
       if (feed > 0) {
         arcPosition(kernelFocus, hopper, feed, 0.65 * flourish, kernel.position)
-        kernel.scale.setScalar(T.MathUtils.lerp(0.75, 0.07, feedScale))
+        const physicalScale = T.MathUtils.lerp(0.75, 0.115, feedScale)
+        kernel.scale.setScalar(physicalScale * T.MathUtils.lerp(1, 0.46, throatOcclusion))
         kernel.rotation.z += feed * 1.6
       }
       // The only remaining fade occurs after the tiny kernel is inside the
