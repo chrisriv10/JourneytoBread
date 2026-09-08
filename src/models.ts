@@ -29,10 +29,34 @@ export type JourneySequence = {
 
 const temp = new T.Vector3()
 const temp2 = new T.Vector3()
+const CONTACT_EPSILON = 0.003
+
+type SupportSurface = {
+  object: T.Mesh<T.BufferGeometry, T.Material>
+  topY: number
+}
+
+function geometryYBounds(geometry: T.BufferGeometry) {
+  if (!geometry.boundingBox) geometry.computeBoundingBox()
+  if (!geometry.boundingBox) throw new Error('Unable to measure geometry bounds')
+  return { min: geometry.boundingBox.min.y, max: geometry.boundingBox.max.y }
+}
+
+// Construction-time measurement only. Grounding stays deterministic and does
+// not pay for Box3 traversal in the render loop.
+function measureLocalBottomY(object: T.Object3D) {
+  object.updateMatrixWorld(true)
+  return new T.Box3().setFromObject(object).min.y
+}
+
+function groundedY(surfaceY: number, localBottomY: number) {
+  return surfaceY - localBottomY + CONTACT_EPSILON
+}
+
 const SCORE_SPECS = [
-  { center: -0.52, width: 0.9, depth: 1.0 },
-  { center: 0, width: 1.05, depth: 1.1 },
-  { center: 0.5, width: 0.84, depth: 0.94 },
+  { center: -0.52, width: 0.9, depth: 1.0, curve: -0.014 },
+  { center: 0, width: 1.05, depth: 1.1, curve: 0.018 },
+  { center: 0.5, width: 0.84, depth: 0.94, curve: -0.011 },
 ] as const
 
 function createRandom(initial: number) {
@@ -90,9 +114,11 @@ function roundBox(width: number, depth: number, height: number, radius = 0.14) {
   return geometry
 }
 
-function board(parent: T.Object3D, quality: QualityConfig, width = 3.9, depth = 2.7, color: T.ColorRepresentation = 0xc08a55) {
-  const object = mesh(roundBox(width, depth, 0.13), mat(color, quality, 'wood', { roughness: 0.86, bumpScale: 0.012 }), parent, 0, -0.16, 0)
+function board(parent: T.Object3D, quality: QualityConfig, width = 3.9, depth = 2.7, color: T.ColorRepresentation = 0xc08a55): SupportSurface {
+  const geometry = roundBox(width, depth, 0.13)
+  const object = mesh(geometry, mat(color, quality, 'wood', { roughness: 0.86, bumpScale: 0.012 }), parent, 0, -0.16, 0)
   object.name = 'wood-work-surface'
+  const surfaceY = object.position.y + geometryYBounds(geometry).max
   const grainRandom = createRandom(Math.round(width * depth * 977))
   const grainColor = new T.Color(color).multiplyScalar(0.48)
   const grainMaterial = mat(grainColor, quality, undefined, { roughness: 0.96, transparent: true, opacity: 0.24, depthWrite: false })
@@ -100,14 +126,14 @@ function board(parent: T.Object3D, quality: QualityConfig, width = 3.9, depth = 
     const z = (grainRandom() - 0.5) * depth * 0.76
     const wave = (grainRandom() - 0.5) * 0.045
     const line = tube([
-      new T.Vector3(-width * 0.44, -0.019, z),
-      new T.Vector3(-width * 0.08, -0.018, z + wave),
-      new T.Vector3(width * 0.2, -0.019, z - wave * 0.45),
-      new T.Vector3(width * 0.44, -0.019, z + wave * 0.3),
+      new T.Vector3(-width * 0.44, surfaceY + 0.001, z),
+      new T.Vector3(-width * 0.08, surfaceY + 0.0015, z + wave),
+      new T.Vector3(width * 0.2, surfaceY + 0.001, z - wave * 0.45),
+      new T.Vector3(width * 0.44, surfaceY + 0.0012, z + wave * 0.3),
     ], 0.0022 + grainRandom() * 0.0014, grainMaterial, parent)
     line.castShadow = line.receiveShadow = false
   }
-  return object
+  return { object, topY: surfaceY }
 }
 
 function irregularCylinderGeometry(top: number, bottom: number, height: number, segments: number, seed: number) {
@@ -184,7 +210,7 @@ class Visibility {
   private readonly materials: { material: T.Material; opacity: number; depthWrite: boolean }[]
   private last = -1
 
-  constructor(readonly object: T.Object3D) {
+  constructor(readonly object: T.Object3D, private readonly depthWriteThreshold = 0.96) {
     this.materials = []
     object.traverse((child) => {
       const candidate = child as T.Mesh
@@ -205,7 +231,7 @@ class Visibility {
     this.materials.forEach((entry) => {
       entry.material.transparent = true
       entry.material.opacity = opacity * entry.opacity
-      entry.material.depthWrite = entry.depthWrite && opacity > 0.96
+      entry.material.depthWrite = entry.depthWrite && opacity > this.depthWriteThreshold
     })
   }
 }
@@ -228,7 +254,7 @@ class DoughMorph {
   private readonly crust = new T.Color(0xc67d34)
   private readonly toasted = new T.Color(0x5d240f)
   private readonly cut = new T.Color(0xf0c887)
-  private readonly raised = new T.Color(0xf2b85d)
+  private readonly raised = new T.Color(0xf5c16d)
 
   constructor(parent: T.Object3D, quality: QualityConfig) {
     const widthSegments = quality.mobile ? 72 : quality.tier === 'high' ? 128 : 96
@@ -297,8 +323,13 @@ class DoughMorph {
       const endTaper = 1 - (proof * 0.045 + spring * 0.18) * Math.pow(Math.abs(x), 1.48)
       const asymmetry = 1 + proof * (0.052 * Math.sin(x * 2.2 + z * 2.7) + x * 0.028 - z * 0.018)
       const proofCrown = proof * crown * (0.024 * Math.sin(x * 3.1 - z * 2.4) + 0.018 * x)
+      const proofBubble = proof * crown * (1 - baking * 0.55) * (
+        Math.exp(-((x - 0.28) ** 2 + (z + 0.16) ** 2) / 0.038) * 0.012
+        + Math.exp(-((x + 0.34) ** 2 + (z - 0.08) ** 2) / 0.052) * 0.009
+        + Math.exp(-((x - 0.02) ** 2 + (z - 0.31) ** 2) / 0.034) * 0.007
+      )
       const handmadeCrown = baking * crown * (Math.sin(x * 2.7 + z * 3.6) * 0.012 + x * 0.008 - z * 0.006)
-      let py = foot * height * asymmetry * endTaper - localPress * crown * 0.225 + wetFold + kneadFold + foldRidge + proofCrown + handmadeCrown
+      let py = foot * height * asymmetry * endTaper - localPress * crown * 0.225 + wetFold + kneadFold + foldRidge + proofCrown + proofBubble + handmadeCrown
       let px = x * width * (1 + pressure * 0.15) + wetEdge * (0.4 + crown) + shaping * Math.sin(z * 3.2 + y) * 0.018
       const pz = z * depth * endTaper * (1 - pressure * 0.09) + wetEdge * 0.42
       if (px > 0.72) px = T.MathUtils.lerp(px, 0.72, sliceCut)
@@ -308,7 +339,8 @@ class DoughMorph {
       let scoreEdge = 0
       for (const score of SCORE_SPECS) {
         const scoreWidth = (0.014 + spring * 0.031) * score.width
-        const distance = Math.abs(cutLine - score.center)
+        const curvedCenter = score.center + Math.sin(pz * 2.7 + score.center * 3.2) * score.curve
+        const distance = Math.abs(cutLine - curvedCenter)
         groove = Math.max(groove, Math.exp(-Math.pow(distance / scoreWidth, 2)))
         scoreCore = Math.max(scoreCore, Math.exp(-Math.pow(distance / (scoreWidth * 0.34), 2)) * score.depth)
         scoreEdge = Math.max(scoreEdge, Math.exp(-Math.pow((distance - scoreWidth * 1.05) / (scoreWidth * 0.48), 2)))
@@ -319,7 +351,8 @@ class DoughMorph {
       scoreEdge *= cutMask * scoring
       py -= groove * (0.026 + spring * 0.058)
       const irregular = Math.sin(px * 21 + pz * 13) * Math.sin(pz * 31 - px * 9)
-      py += crown * baking * irregular * 0.0055
+      const blister = Math.max(0, Math.sin(px * 8.6 + pz * 4.9) * Math.cos(pz * 10.2 - px * 3.3) - 0.7)
+      py += crown * baking * (irregular * 0.0055 + blister * 0.008)
       this.position.setXYZ(i, px, Math.max(0, py), pz)
 
       this.color.copy(this.pale).lerp(this.wet, mixing * (0.72 - shaping * 0.25))
@@ -329,10 +362,10 @@ class DoughMorph {
       const bakeVariation = clamp01(0.52 + crownAmount * 0.34 + x * 0.065 - z * 0.12 + irregular * 0.15)
       this.color.lerp(this.crust, baking * bakeVariation)
       const toastMottle = Math.max(0, Math.sin(px * 5.2 + pz * 4.1 + Math.sin(pz * 2.7)) * Math.cos(pz * 6.1 - px * 3.4) - 0.08)
-      this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.74 + Math.max(0, z) * 0.075 + scoreCore * 0.33 + toastMottle * crownAmount * 0.045))
+      this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.74 + Math.max(0, z) * 0.075 + scoreCore * 0.36 + toastMottle * crownAmount * 0.078))
       this.color.lerp(this.cut, groove * baking * 0.72)
       this.color.lerp(this.toasted, scoreCore * baking * 0.76)
-      this.color.lerp(this.raised, scoreEdge * baking * 0.8)
+      this.color.lerp(this.raised, scoreEdge * baking * 0.88)
       const flour = Math.max(0, Math.sin(px * 12 + pz * 7) * Math.sin(pz * 18 - px * 3.5) - 0.34)
       this.color.lerp(this.pale, flour * crownAmount * baking * (1 - groove) * 0.4)
       this.colors.setXYZ(i, this.color.r, this.color.g, this.color.b)
@@ -434,7 +467,7 @@ function flourMoundGeometry(quality: QualityConfig, seed: number) {
   const rings = quality.mobile ? 7 : 11
   const localRandom = createRandom(seed)
   const perimeter = Array.from({ length: radialSegments }, () => 0.91 + localRandom() * 0.17)
-  const positions: number[] = [0, 0.34, 0]
+  const positions: number[] = [0, 0.225, 0]
   const uvs: number[] = [0.5, 0.5]
   const colors: number[] = [1, 0.975, 0.91]
   const indices: number[] = []
@@ -445,11 +478,13 @@ function flourMoundGeometry(quality: QualityConfig, seed: number) {
       const irregularRadius = radial * T.MathUtils.lerp(1, perimeter[segment], Math.pow(radial, 1.5))
       const x = Math.cos(angle) * irregularRadius * 0.96
       const z = Math.sin(angle) * irregularRadius * 0.7
-      const broadSlope = Math.pow(Math.max(0, 1 - radial), 0.72) * 0.34
+      // A broad, shallow angle-of-repose profile. The low derivative at the
+      // center avoids the conical peak that made the old mound look sculpted.
+      const broadSlope = Math.pow(Math.max(0, 1 - Math.pow(radial, 1.65)), 1.42) * 0.225
       const granular = (
         Math.sin(angle * 5.1 + radial * 8.2)
         + Math.sin(angle * 9.3 - radial * 5.4) * 0.5
-      ) * 0.008 * (1 - radial)
+      ) * 0.0045 * (1 - radial)
       positions.push(x, Math.max(0, broadSlope + granular), z)
       uvs.push(0.5 + x * 0.5, 0.5 + z / 1.4)
       const light = 0.9 + (1 - radial) * 0.065 + Math.sin(angle * 4.7 + radial * 7.2) * 0.018
@@ -484,11 +519,13 @@ function flourMoundGeometry(quality: QualityConfig, seed: number) {
 class FlourSystem {
   readonly group = new T.Group()
   readonly pile = new T.Group()
+  private readonly mound: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>
+  private readonly moundMaterial: T.MeshStandardMaterial
+  private readonly settledDust: T.InstancedMesh
   private readonly pileShadow: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>
   private readonly grinding: FlourPointLayer
   private readonly stream: FlourPointLayer
   private readonly impact: FlourPointLayer
-  private readonly pileVisibility: Visibility
   private readonly grindingParticles: FlourParticle[] = []
   private readonly streamParticles: FlourParticle[] = []
   private readonly impactParticles: FlourParticle[] = []
@@ -572,21 +609,19 @@ class FlourSystem {
       this.haze.push({ sprite, material, phase: random() * Math.PI * 2, near: random(), scale: 0.62 + random() * 0.68 })
     }
     const pileGeometry = flourMoundGeometry(quality, 7301)
-    const pileMaterial = mat(0xe7dcc4, quality, 'flour', { roughness: 1, bumpScale: 0.004, vertexColors: true })
-    const mainMound = mesh(pileGeometry, pileMaterial, this.pile)
-    mainMound.name = 'flour-pile-mound'
-    const shoulder = mesh(pileGeometry.clone(), pileMaterial, this.pile, -0.27, 0.002, 0.08)
-    shoulder.scale.set(0.42, 0.62, 0.46)
-    shoulder.rotation.y = -0.34
-    const spill = mesh(pileGeometry.clone(), pileMaterial, this.pile, 0.3, 0.001, 0.02)
-    spill.scale.set(0.34, 0.45, 0.38)
-    spill.rotation.y = 0.48
+    this.moundMaterial = mat(0xe7dcc4, quality, 'flour', { roughness: 1, bumpScale: 0.003, vertexColors: true })
+    this.mound = mesh(pileGeometry, this.moundMaterial, this.pile)
+    this.mound.name = 'flour-pile-mound'
+    this.mound.castShadow = false
     this.pile.name = 'flour-pile'
     this.group.add(this.pile)
-    dust(this.pile, quality, quality.mobile ? 34 : 58, 1.12, 0.008)
-    this.pileVisibility = new Visibility(this.pile)
-    this.pileShadow = contactShadow(this.group, 1.8, 1.15)
-    this.pileShadow.material.opacity = 0.27
+    this.settledDust = dust(this.pile, quality, quality.mobile ? 22 : 38, 0.76, CONTACT_EPSILON)
+    const settledMaterial = this.settledDust.material as T.MeshStandardMaterial
+    settledMaterial.transparent = true
+    settledMaterial.opacity = 0
+    settledMaterial.depthWrite = false
+    this.pileShadow = contactShadow(this.group, 1.45, 0.95)
+    this.pileShadow.material.opacity = 0.1
   }
 
   update(
@@ -603,19 +638,27 @@ class FlourSystem {
     const impactBuild = windowProgress(p, 0.326, 0.405)
     const atmosphere = windowProgress(p, 0.342, 0.418) * (1 - windowProgress(p, 0.463, 0.505))
     const transitionVeil = windowProgress(p, 0.397, 0.432) * (1 - windowProgress(p, 0.448, 0.486))
-    const pileGrowth = windowProgress(p, 0.326, 0.413, (value) => value * value * (2 - value))
-    const pileFade = 1 - windowProgress(p, 0.422, 0.452)
-    const pilePresence = pileGrowth * pileFade
+    const pileRadiusGrowth = windowProgress(p, 0.326, 0.413, (value) => value * value * (2 - value))
+    const pileHeightGrowth = windowProgress(p, 0.332, 0.402, (value) => value * value * (3 - 2 * value))
+    const pileFade = 1 - windowProgress(p, 0.414, 0.444)
+    const pilePresence = pileRadiusGrowth * pileFade
     this.group.visible = p >= 0.27 && p <= 0.51
     this.pile.position.copy(receivingPoint)
-    const pileScale = Math.max(0.001, Math.cbrt(pileGrowth))
-    this.pile.scale.set(pileScale * 0.44, pileScale * 0.55, pileScale * 0.44)
-    this.pileVisibility.set(pileFade)
+    const footprint = T.MathUtils.lerp(0.11, 0.42, Math.pow(pileRadiusGrowth, 0.62))
+    const moundHeight = T.MathUtils.lerp(0.01, 0.155, Math.pow(pileHeightGrowth, 0.92)) * (1 + streamPresence * 0.035)
+    this.mound.scale.set(Math.max(0.001, footprint), Math.max(0.001, moundHeight / 0.225), Math.max(0.001, footprint))
+    this.moundMaterial.transparent = pileFade < 0.999
+    this.moundMaterial.opacity = pileFade
+    this.moundMaterial.depthWrite = pileFade > 0.96
+    const dustSpread = T.MathUtils.lerp(0.22, 1, Math.pow(pileRadiusGrowth, 0.58))
+    this.settledDust.scale.set(dustSpread, 1, dustSpread)
+    ;(this.settledDust.material as T.MeshStandardMaterial).opacity = pileFade * (0.1 + pileRadiusGrowth * 0.25)
+    this.pile.visible = pilePresence > 0.002
     this.pileShadow.position.set(receivingPoint.x - 0.018, receivingPoint.y + 0.002, receivingPoint.z - 0.032)
-    const pileShadowScale = Math.max(0.001, Math.sqrt(pileGrowth) * 0.56)
-    this.pileShadow.scale.set(pileShadowScale * 1.04, pileShadowScale * 0.9, 1)
+    const pileShadowScale = Math.max(0.001, 0.24 + pileRadiusGrowth * 0.58)
+    this.pileShadow.scale.set(pileShadowScale * 1.02, pileShadowScale * 0.88, 1)
     this.pileShadow.visible = this.pile.visible
-    this.pileShadow.material.opacity = pilePresence * 0.27
+    this.pileShadow.material.opacity = pilePresence * 0.1
     if (!this.group.visible) return
 
     this.grindingParticles.forEach((particle, index) => {
@@ -977,10 +1020,14 @@ function mill(quality: QualityConfig) {
   const chuteWood = mat(0x936039, quality, 'wood', { roughness: 0.88, bumpScale: 0.009 })
   const chuteEdge = mat(0x6d4025, quality, 'wood', { roughness: 0.92, bumpScale: 0.008 })
   mesh(roundBox(0.46, 0.82, 0.055, 0.04), chuteWood, chute)
+  const trough = mesh(new T.BoxGeometry(0.31, 0.008, 0.56), mat(0x493023, quality, 'wood', { roughness: 0.96 }), chute, 0, 0.034, 0.06)
+  trough.castShadow = false
   mesh(new T.BoxGeometry(0.042, 0.105, 0.77), chuteEdge, chute, -0.205, 0.052, 0)
   mesh(new T.BoxGeometry(0.042, 0.105, 0.77), chuteEdge, chute, 0.205, 0.052, 0)
   const chuteMouth = mesh(new T.BoxGeometry(0.37, 0.075, 0.038), mat(0x2f1c12, quality, undefined, { roughness: 0.98 }), chute, 0, 0.025, 0.4)
   chuteMouth.castShadow = false
+  const lowerLip = mesh(new T.BoxGeometry(0.47, 0.052, 0.06), chuteEdge, chute, 0, -0.004, 0.405)
+  lowerLip.rotation.z = 0.006
   const flourTrace = mat(0xe7d9bd, quality, 'flour', { transparent: true, opacity: 0.42, depthWrite: false })
   for (let index = 0; index < 3; index += 1) {
     const trace = mesh(
@@ -994,11 +1041,12 @@ function mill(quality: QualityConfig) {
     trace.rotation.y = (index - 1) * 0.07
     trace.castShadow = trace.receiveShadow = false
   }
-  const outlet = new T.Vector3(0, 0.015, 0.43).applyEuler(chute.rotation).add(chute.position)
+  const outlet = new T.Vector3(0, 0.006, 0.408).applyEuler(chute.rotation).add(chute.position)
+  const localBottomY = measureLocalBottomY(group)
   const shadow = contactShadow(group, 2.85, 2.45)
   shadow.scale.set(1.08, 1, 1)
   shadow.material.opacity = 0.82
-  return { group, rotor, outlet }
+  return { group, rotor, outlet, shadow, localBottomY }
 }
 
 function bowl(quality: QualityConfig) {
@@ -1025,8 +1073,13 @@ function bowl(quality: QualityConfig) {
   rim.scale.set(1, 0.98, 1)
   const innerLip = ring(1.045, 0.018, mat(0xb9b4a8, quality, undefined, { roughness: 0.48 }), group, 0.455)
   innerLip.scale.set(1, 0.96, 1)
-  ring(0.48, 0.035, mat(0xaaa598, quality, undefined, { roughness: 0.62 }), group, -0.4)
-  return { group, flourSurface }
+  const footMaterial = mat(0xaaa598, quality, undefined, { roughness: 0.62 })
+  const foot = mesh(new T.CylinderGeometry(0.49, 0.455, 0.052, 40), footMaterial, group, 0, -0.401, 0)
+  foot.scale.z = 0.96
+  const footRing = ring(0.48, 0.035, footMaterial, group, -0.4)
+  footRing.scale.z = 0.96
+  const localBottomY = measureLocalBottomY(group)
+  return { group, flourSurface, localBottomY, doughSupportY: 0.055 }
 }
 
 function jug(quality: QualityConfig) {
@@ -1067,7 +1120,7 @@ function proofBasket(quality: QualityConfig) {
     const topRadius = 0.995 + Math.sin(i * 1.31) * 0.008
     rod(new T.Vector3(Math.cos(angle) * 0.79, 0.055, Math.sin(angle) * 0.79), new T.Vector3(Math.cos(angle) * topRadius, 0.405, Math.sin(angle) * topRadius), 0.0095, rodMaterials[i % 2], group)
   }
-  return group
+  return { group, localBottomY: measureLocalBottomY(group), doughSupportY: 0.13 }
 }
 
 function oven(quality: QualityConfig) {
@@ -1090,6 +1143,9 @@ function oven(quality: QualityConfig) {
   for (const side of [-1, 1]) for (let row = 0; row < 4; row += 1) {
     const brick = mesh(new T.BoxGeometry(0.49, 0.265, 0.24), bricks[(row + (side > 0 ? 1 : 0)) % bricks.length], group, side * 1.47, 0.16 + row * 0.3, 0.69)
     brick.position.x += Math.sin(row * 2.1 + side) * 0.012
+    brick.position.z += Math.cos(row * 1.8 + side) * 0.014
+    brick.rotation.z = Math.sin(row * 1.37 + side) * 0.012
+    brick.scale.set(0.96 + (row % 3) * 0.025, 0.97 + ((row + 1) % 2) * 0.025, 1)
   }
   for (let i = 0; i < 13; i += 1) {
     const a = (i / 13) * Math.PI + 0.005
@@ -1100,12 +1156,17 @@ function oven(quality: QualityConfig) {
     wedge.lineTo(Math.cos(b) * 1.745, 1.17 + Math.sin(b) * 1.39)
     wedge.lineTo(Math.cos(b) * 1.2, 1.17 + Math.sin(b) * 0.94)
     wedge.closePath()
-    mesh(new T.ExtrudeGeometry(wedge, { depth: 1.5, bevelEnabled: true, bevelSegments: 1, bevelSize: 0.012, bevelThickness: 0.012 }), bricks[i % bricks.length], group, 0, 0, -0.86)
+    const archBrick = mesh(new T.ExtrudeGeometry(wedge, { depth: 1.5, bevelEnabled: true, bevelSegments: 1, bevelSize: 0.012, bevelThickness: 0.012 }), bricks[i % bricks.length], group, 0, 0, -0.86)
+    archBrick.position.z += Math.sin(i * 1.73) * 0.016
   }
   const floorMaterials = [0x655447, 0x59493e, 0x746054].map((color) => mat(color, quality, 'stone', { roughness: 0.98 }))
+  let floorSurfaceY = -Infinity
   for (let i = 0; i < 5; i += 1) {
-    const slab = mesh(new T.BoxGeometry(0.47, 0.11, 1.45), floorMaterials[i % floorMaterials.length], group, -0.98 + i * 0.49, 0.04, 0.01)
+    const slabGeometry = new T.BoxGeometry(0.47, 0.11, 1.45)
+    const slab = mesh(slabGeometry, floorMaterials[i % floorMaterials.length], group, -0.98 + i * 0.49, 0.04, 0.01)
     slab.position.y += Math.sin(i * 2.1) * 0.008
+    slab.rotation.y = Math.sin(i * 1.9) * 0.009
+    floorSurfaceY = Math.max(floorSurfaceY, slab.position.y + geometryYBounds(slabGeometry).max)
   }
   const glowCanvas = document.createElement('canvas')
   glowCanvas.width = 256
@@ -1134,7 +1195,7 @@ function oven(quality: QualityConfig) {
     ember.userData.phase = random() * Math.PI * 2
     embers.push(ember)
   }
-  return { group, glow, embers }
+  return { group, glow, embers, floorSurfaceY }
 }
 
 function breadKnife(quality: QualityConfig) {
@@ -1312,17 +1373,19 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
 
   const worktop = new T.Group()
   worktop.name = 'shared-worktop'
-  board(worktop, quality, 5.5, 3.7, 0x8f6749)
-  dust(worktop, quality, quality.crumbCount, 1.9, 0.002)
+  const worktopSurface = board(worktop, quality, 5.5, 3.7, 0x8f6749)
+  dust(worktop, quality, quality.crumbCount, 1.9, worktopSurface.topY + CONTACT_EPSILON)
   worktop.rotation.y = -0.018
   group.add(worktop)
+  const millGroundY = groundedY(worktopSurface.topY, millModel.localBottomY)
 
   const flour = new FlourSystem(quality)
   group.add(flour.group)
   const bowlModel = bowl(quality)
   bowlModel.group.name = 'mixing-bowl'
   group.add(bowlModel.group)
-  const bowlShadow = contactShadow(group, 2.6, 2.3)
+  const bowlGroundY = groundedY(worktopSurface.topY, bowlModel.localBottomY)
+  const bowlShadow = contactShadow(group, 1.45, 0.92)
 
   const waterGroup = jug(quality)
   group.add(waterGroup)
@@ -1360,17 +1423,20 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   const cutDetails = breadCutDetails(quality)
   cutDetails.group.visible = false
   dough.mesh.add(cutDetails.group)
-  const doughShadow = contactShadow(group, 2.5, 1.85)
+  const doughShadow = contactShadow(group, 2.22, 1.5)
   const spoon = new T.Group()
   spoon.name = 'mixing-spoon'
   const spoonMaterial = mat(0xbd8747, quality, 'wood', { roughness: 0.86 })
   mesh(new T.SphereGeometry(1, 24, 16), spoonMaterial, spoon).scale.set(0.16, 0.055, 0.24)
   rod(new T.Vector3(0, 0.03, 0), new T.Vector3(0.28, 1.12, 0), 0.037, spoonMaterial, spoon)
   group.add(spoon)
-  const basket = proofBasket(quality)
+  const basketModel = proofBasket(quality)
+  const basket = basketModel.group
   basket.name = 'proofing-basket'
   basket.scale.set(1.14, 1, 0.92)
   group.add(basket)
+  const basketGroundY = groundedY(worktopSurface.topY, basketModel.localBottomY)
+  const basketShadow = contactShadow(group, 2.1, 1.35)
 
   const proofMotes = new T.Group()
   proofMotes.name = 'proofing-dust-motes'
@@ -1395,17 +1461,19 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   group.add(ovenModel.group)
   const peel = new T.Group()
   peel.name = 'oven-peel'
-  mesh(roundBox(2.65, 1.95, 0.045, 0.25), mat(0xe3be85, quality, 'wood'), peel)
+  const peelDeckGeometry = roundBox(2.65, 1.95, 0.045, 0.25)
+  mesh(peelDeckGeometry, mat(0xe3be85, quality, 'wood'), peel)
   rod(new T.Vector3(0, 0.005, 0.95), new T.Vector3(0, 0.005, 2.7), 0.055, mat(0xaf854f, quality, 'wood'), peel)
   group.add(peel)
+  const peelGroundY = ovenModel.floorSurfaceY - geometryYBounds(peelDeckGeometry).max
 
   const knife = breadKnife(quality)
   group.add(knife)
 
   const finalBoard = new T.Group()
   finalBoard.name = 'final-board'
-  board(finalBoard, quality, 3.65, 2.45, 0x633923)
-  dust(finalBoard, quality, Math.max(18, Math.floor(quality.crumbCount * 0.62)), 1.48)
+  const finalBoardSurface = board(finalBoard, quality, 3.65, 2.45, 0x633923)
+  dust(finalBoard, quality, Math.max(18, Math.floor(quality.crumbCount * 0.62)), 1.48, finalBoardSurface.topY + CONTACT_EPSILON)
   finalBoard.rotation.y = 0.025
   group.add(finalBoard)
   const steam = new T.Group()
@@ -1429,7 +1497,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
 
   const visibility = {
     field: new Visibility(field), kernel: new Visibility(kernel), mill: new Visibility(millModel.group),
-    top: new Visibility(worktop), bowl: new Visibility(bowlModel.group),
+    top: new Visibility(worktop), bowl: new Visibility(bowlModel.group, 0.02),
     water: new Visibility(waterGroup), spoon: new Visibility(spoon),
     additions: new Visibility(additions), clumps: new Visibility(mixtureClumps), basket: new Visibility(basket),
     oven: new Visibility(ovenModel.group), peel: new Visibility(peel),
@@ -1442,11 +1510,11 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   const outlet = new T.Vector3()
   const flourReceivingPoint = new T.Vector3()
   const bowlTarget = new T.Vector3()
-  const doughInBowl = new T.Vector3(0, 0.48, 0.18)
-  const doughOnBoard = new T.Vector3(0, 0.002, 0.12)
-  const doughInBasket = new T.Vector3(0, 0.075, 0.12)
-  const ovenDestination = new T.Vector3(0, 0.105, -1.4)
-  const finalDestination = new T.Vector3(0, 0.02, 0.48)
+  const doughInBowl = new T.Vector3(0, bowlGroundY + bowlModel.doughSupportY, 0.18)
+  const doughOnBoard = new T.Vector3(0, worktopSurface.topY + CONTACT_EPSILON, 0.12)
+  const doughInBasket = new T.Vector3(0, basketGroundY + basketModel.doughSupportY, 0.12)
+  const ovenDestination = new T.Vector3(0, ovenModel.floorSurfaceY + CONTACT_EPSILON, -1.4)
+  const finalDestination = new T.Vector3(0, finalBoardSurface.topY + CONTACT_EPSILON, 0.48)
   const knifePositionKeys: SplineKeyframe<T.Vector3>[] = [
     { at: 0.968, value: new T.Vector3(0.78, 1.78, 0.63) },
     { at: 0.982, value: new T.Vector3(0.78, 1.26, 0.57) },
@@ -1501,9 +1569,9 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       kernel.rotation.set(0.06 * extract, 0.08 * extract, -0.43 + extract * 1.12)
       // Once established, the mill remains physically planted. Flour and the
       // camera mask its departure rather than sliding the entire machine away.
-      millModel.group.position.set(0.12 + (1 - millEnter) * 0.34, 0, -0.4 - (1 - millEnter) * 2.55)
+      millModel.group.position.set(0.12 + (1 - millEnter) * 0.34, millGroundY, -0.4 - (1 - millEnter) * 2.55)
       visibility.mill.set(windowProgress(p, 0.178, 0.228) * (1 - windowProgress(p, 0.423, 0.448)))
-      hopper.set(millModel.group.position.x, 1.21, millModel.group.position.z)
+      hopper.set(millModel.group.position.x, millModel.group.position.y + 1.21, millModel.group.position.z)
       if (feed > 0) {
         arcPosition(kernelFocus, hopper, feed, 0.65 * flourish, kernel.position)
         const physicalScale = T.MathUtils.lerp(0.75, 0.115, feedScale)
@@ -1515,19 +1583,21 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const grind = windowProgress(p, 0.284, 0.405, (value) => value * value * (2 - value))
       millModel.rotor.rotation.y = grind * Math.PI * 9 + Math.sin(ambient * 0.35) * 0.014 * bell(grind)
       millModel.rotor.position.y = 0.62 + Math.sin(grind * Math.PI * 18) * bell(grind) * 0.0045 * flourish
+      millModel.shadow.position.y = worktopSurface.topY - millGroundY + CONTACT_EPSILON * 0.5
       outlet.copy(millModel.outlet).add(millModel.group.position)
-      flourReceivingPoint.set(outlet.x + 0.018, 0.006, outlet.z + 0.055)
+      flourReceivingPoint.set(outlet.x + 0.018, worktopSurface.topY + CONTACT_EPSILON, outlet.z + 0.055)
       visibility.top.set(windowProgress(p, 0.205, 0.255) * (1 - windowProgress(p, 0.8, 0.845)))
 
-      const bowlReveal = windowProgress(p, 0.423, 0.482)
-      const bowlRecede = windowProgress(p, 0.592, 0.66)
+      const bowlRecede = windowProgress(p, 0.626, 0.66)
       // The dough fills the foreground as the camera follows it out; finish the
       // bowl fade while it is still occluded instead of leaving a ghostly rim.
-      const bowlPresence = windowProgress(p, 0.427, 0.47) * (1 - windowProgress(p, 0.602, 0.633))
-      bowlModel.group.position.set(0.32 * (1 - bowlReveal) - bowlRecede * 0.28, 0.43 - bowlRecede * 0.05, 0.18 - (1 - bowlReveal) * 2.6 - bowlRecede * 1.45)
+      const bowlPresence = windowProgress(p, 0.434, 0.449, (value) => value * value * (3 - 2 * value)) * (1 - windowProgress(p, 0.621, 0.629, (value) => value ** 4))
+      // The bowl is grounded at its final preparation position before it is
+      // revealed. Flour atmosphere and camera motion perform the handoff.
+      bowlModel.group.position.set(-bowlRecede * 0.2, bowlGroundY, 0.18 - bowlRecede * 1.25)
       visibility.bowl.set(bowlPresence)
-      bowlShadow.position.set(bowlModel.group.position.x, 0.004, bowlModel.group.position.z)
-      bowlShadow.material.opacity = bowlPresence * 0.86
+      bowlShadow.position.set(bowlModel.group.position.x - 0.025, worktopSurface.topY + CONTACT_EPSILON * 0.5, bowlModel.group.position.z - 0.035)
+      bowlShadow.material.opacity = bowlPresence * bowlPresence * 0.48
       bowlShadow.visible = bowlShadow.material.opacity > 0.002
       bowlTarget.copy(bowlModel.group.position).add(temp.set(0, 0.16, 0))
       flour.update(p, ambient, outlet, flourReceivingPoint, millModel.group.position, millModel.rotor.rotation.y)
@@ -1601,8 +1671,12 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const basketApproach = windowProgress(p, 0.65, 0.705)
       const basketPlace = windowProgress(p, 0.688, 0.735)
       const basketRecede = windowProgress(p, 0.805, 0.848)
-      basket.position.set(0.25 * (1 - basketApproach), -0.34 * (1 - basketApproach) - basketRecede * 0.38, 0.12 - (1 - basketApproach) * 2.35 - basketRecede * 0.72)
-      visibility.basket.set(windowProgress(p, 0.666, 0.7) * (1 - windowProgress(p, 0.812, 0.846)))
+      basket.position.set(0.2 * (1 - basketApproach), basketGroundY, 0.12 - (1 - basketApproach) * 2.2 - basketRecede * 0.72)
+      const basketPresence = windowProgress(p, 0.666, 0.7) * (1 - windowProgress(p, 0.812, 0.846))
+      visibility.basket.set(basketPresence)
+      basketShadow.position.set(basket.position.x - 0.02, worktopSurface.topY + CONTACT_EPSILON * 0.5, basket.position.z - 0.025)
+      basketShadow.material.opacity = basketPresence * 0.27
+      basketShadow.visible = basketShadow.material.opacity > 0.002
       if (p >= 0.688) arcPosition(doughOnBoard, doughInBasket, basketPlace, 0.28, dough.mesh.position)
       const proofMotePresence = overlap(p, 0.69, 0.82, 0.022)
       proofMotes.visible = proofMotePresence > 0.002
@@ -1625,7 +1699,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       let peelZ = T.MathUtils.lerp(1.2, 0.12, peelIn)
       if (intoOven > 0) peelZ = T.MathUtils.lerp(0.12, ovenDestination.z, intoOven)
       if (peelRetract > 0) peelZ = T.MathUtils.lerp(ovenDestination.z, 1.45, peelRetract)
-      peel.position.set(0, 0.053, peelZ)
+      peel.position.set(0, peelGroundY, peelZ)
       visibility.peel.set(windowProgress(p, 0.765, 0.8) * (1 - windowProgress(p, 0.88, 0.91)))
       if (p >= 0.808) arcPosition(doughInBasket, ovenDestination, intoOven, 0.22, dough.mesh.position)
       const glow = windowProgress(p, 0.748, 0.83) * (1 - ovenExit)
@@ -1662,8 +1736,14 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         crumb.rotation.set(fall * index, fall * 2.1, fall * 0.7)
       })
       const airborne = Math.max(bell(liftOut), bell(basketPlace), bell(intoOven), bell(finish))
-      const doughShadowOpacity = windowProgress(p, 0.61, 0.635) * 0.62 * (1 - airborne * 0.9)
-      doughShadow.position.set(dough.mesh.position.x, p < 0.808 ? 0.003 : p < 0.925 ? 0.101 : 0.019, dough.mesh.position.z)
+      const contactStrength = p < 0.808 ? 0.4 : p < 0.925 ? 0.32 : 0.5
+      const doughShadowOpacity = windowProgress(p, 0.61, 0.635) * contactStrength * (1 - airborne * 0.9)
+      const doughSupportY = p < 0.808
+        ? worktopSurface.topY + CONTACT_EPSILON * 0.5
+        : p < 0.925
+          ? ovenModel.floorSurfaceY + CONTACT_EPSILON * 0.5
+          : finalBoardSurface.topY + CONTACT_EPSILON * 0.5
+      doughShadow.position.set(dough.mesh.position.x, doughSupportY, dough.mesh.position.z)
       doughShadow.visible = doughShadowOpacity > 0.002
       doughShadow.material.opacity = doughShadowOpacity
       steam.position.copy(dough.mesh.position)
