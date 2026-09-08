@@ -346,86 +346,158 @@ class DoughMorph {
   }
 }
 
-type FlourParticle = { x: number; y: number; z: number; delay: number; phase: number; weight: number; near: number }
+type FlourParticle = {
+  angle: number
+  radius: number
+  delay: number
+  phase: number
+  weight: number
+  near: number
+  turbulence: number
+}
+
+type FlourPointLayer = {
+  points: T.Points<T.BufferGeometry, T.ShaderMaterial>
+  positions: T.BufferAttribute
+  alphas: T.BufferAttribute
+}
+
+function flourPointLayer(quality: QualityConfig, count: number, minSize: number, maxSize: number) {
+  const geometry = new T.BufferGeometry()
+  const positions = new T.BufferAttribute(new Float32Array(count * 3), 3)
+  const alphas = new T.BufferAttribute(new Float32Array(count), 1)
+  const sizes = new Float32Array(count)
+  const shapes = new Float32Array(count)
+  for (let index = 0; index < count; index += 1) {
+    sizes[index] = T.MathUtils.lerp(minSize, maxSize, Math.pow(random(), 1.65))
+    shapes[index] = random()
+  }
+  geometry.setAttribute('position', positions)
+  geometry.setAttribute('alpha', alphas)
+  geometry.setAttribute('size', new T.BufferAttribute(sizes, 1))
+  geometry.setAttribute('shape', new T.BufferAttribute(shapes, 1))
+  const material = new T.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      tint: { value: new T.Color(0xf4ead5) },
+      pixelRatio: { value: quality.dpr },
+    },
+    vertexShader: `
+      attribute float alpha;
+      attribute float size;
+      attribute float shape;
+      varying float vAlpha;
+      varying float vShape;
+      uniform float pixelRatio;
+      void main() {
+        vAlpha = alpha;
+        vShape = shape;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = clamp(size * 18.0 * pixelRatio / -mv.z, 0.65, 8.5);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 tint;
+      varying float vAlpha;
+      varying float vShape;
+      void main() {
+        vec2 point = gl_PointCoord - 0.5;
+        float angle = atan(point.y, point.x);
+        float irregularEdge = 1.0
+          + sin(angle * 5.0 + vShape * 6.283) * 0.12
+          + sin(angle * 9.0 - vShape * 4.7) * 0.055;
+        float radius = length(point) * 2.0 / irregularEdge;
+        if (radius > 1.0) discard;
+        float feather = 1.0 - smoothstep(0.34, 1.0, radius);
+        float granular = 0.88 + sin((point.x - point.y + vShape) * 31.0) * 0.12;
+        gl_FragColor = vec4(tint, vAlpha * feather * granular);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  })
+  const points = new T.Points(geometry, material)
+  points.frustumCulled = false
+  return { points, positions, alphas } satisfies FlourPointLayer
+}
 
 class FlourSystem {
   readonly group = new T.Group()
-  readonly pile: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>
+  readonly pile = new T.Group()
   private readonly pileShadow: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>
-  private readonly points: T.Points<T.BufferGeometry, T.ShaderMaterial>
-  private readonly particles: FlourParticle[] = []
-  private readonly positions: T.BufferAttribute
-  private readonly alphas: T.BufferAttribute
+  private readonly grinding: FlourPointLayer
+  private readonly stream: FlourPointLayer
+  private readonly impact: FlourPointLayer
+  private readonly grindingParticles: FlourParticle[] = []
+  private readonly streamParticles: FlourParticle[] = []
+  private readonly impactParticles: FlourParticle[] = []
   private readonly haze: { sprite: T.Sprite; material: T.SpriteMaterial; phase: number; near: number; scale: number }[] = []
   private readonly source = new T.Vector3()
   private readonly destination = new T.Vector3()
 
   constructor(quality: QualityConfig) {
     this.group.name = 'milling-output'
-    const count = quality.flourCount
-    const geometry = new T.BufferGeometry()
-    this.positions = new T.BufferAttribute(new Float32Array(count * 3), 3)
-    this.alphas = new T.BufferAttribute(new Float32Array(count), 1)
-    const sizes = new Float32Array(count)
-    const clusters = Array.from({ length: 14 }, () => {
-      const angle = random() * Math.PI * 2
-      const radius = Math.sqrt(random())
-      return { x: Math.cos(angle) * radius * 0.68, z: Math.sin(angle) * radius * 0.46 }
-    })
-    for (let i = 0; i < count; i += 1) {
-      const cluster = clusters[Math.floor(random() * clusters.length)]
-      const spread = Math.pow(random(), 2.2)
-      const angle = random() * Math.PI * 2
-      const weight = Math.pow(random(), 1.8)
-      this.particles.push({
-        x: cluster.x + Math.cos(angle) * spread * 0.26,
-        y: (0.15 + random() * 0.85) * (1 - Math.min(0.9, Math.hypot(cluster.x, cluster.z))) * 0.48,
-        z: cluster.z + Math.sin(angle) * spread * 0.2,
+    const grindingCount = quality.mobile ? 56 : quality.tier === 'high' ? 150 : 96
+    const streamCount = Math.floor(quality.flourCount * 0.58)
+    const impactCount = Math.max(120, quality.flourCount - streamCount - grindingCount)
+    this.grinding = flourPointLayer(quality, grindingCount, 0.2, 0.74)
+    this.stream = flourPointLayer(quality, streamCount, 0.32, 1.28)
+    this.impact = flourPointLayer(quality, impactCount, 0.26, 1.08)
+    this.group.add(this.grinding.points, this.stream.points, this.impact.points)
+
+    for (let index = 0; index < grindingCount; index += 1) {
+      this.grindingParticles.push({
+        angle: Math.PI * (0.18 + random() * 0.64),
+        radius: 0.46 + random() * 0.72,
         delay: random(),
         phase: random() * Math.PI * 2,
-        weight,
+        weight: Math.pow(random(), 1.8),
         near: random(),
+        turbulence: 0.004 + random() * 0.012,
       })
-      sizes[i] = 0.28 + weight * 1.85
     }
-    geometry.setAttribute('position', this.positions)
-    geometry.setAttribute('alpha', this.alphas)
-    geometry.setAttribute('size', new T.BufferAttribute(sizes, 1))
-    const pointMaterial = new T.ShaderMaterial({
-      transparent: true, depthWrite: false,
-      uniforms: { tint: { value: new T.Color(0xf1e6d0) }, pixelRatio: { value: quality.dpr } },
-      vertexShader: `attribute float alpha; attribute float size; varying float vAlpha;
-        uniform float pixelRatio;
-        void main(){ vAlpha=alpha; vec4 mv=modelViewMatrix*vec4(position,1.0);
-          gl_Position=projectionMatrix*mv; gl_PointSize=clamp(size*19.0*pixelRatio/-mv.z,0.7,10.0); }`,
-      fragmentShader: `uniform vec3 tint; varying float vAlpha;
-        void main(){ float r=length(gl_PointCoord-0.5)*2.0;
-          if(r>1.0) discard;
-          gl_FragColor=vec4(tint,vAlpha*(1.0-smoothstep(0.25,1.0,r)));
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`,
-    })
-    this.points = new T.Points(geometry, pointMaterial)
-    this.points.frustumCulled = false
-    this.group.add(this.points)
+    for (let index = 0; index < streamCount; index += 1) {
+      this.streamParticles.push({
+        angle: random() * Math.PI * 2,
+        radius: Math.pow(random(), 2.15),
+        delay: random(),
+        phase: random(),
+        weight: Math.pow(random(), 1.55),
+        near: random(),
+        turbulence: 0.004 + random() * 0.014,
+      })
+    }
+    for (let index = 0; index < impactCount; index += 1) {
+      this.impactParticles.push({
+        angle: random() * Math.PI * 2,
+        radius: Math.sqrt(random()),
+        delay: random(),
+        phase: random(),
+        weight: Math.pow(random(), 1.45),
+        near: random(),
+        turbulence: 0.008 + random() * 0.02,
+      })
+    }
+
     const hazeCanvas = document.createElement('canvas')
     hazeCanvas.width = hazeCanvas.height = 96
     const hazeContext = hazeCanvas.getContext('2d')!
-    const hazeGradient = hazeContext.createRadialGradient(48, 48, 4, 48, 48, 47)
-    hazeGradient.addColorStop(0, 'rgba(255,247,226,0.42)')
-    hazeGradient.addColorStop(0.42, 'rgba(246,235,211,0.2)')
+    const hazeGradient = hazeContext.createRadialGradient(44, 51, 3, 48, 48, 47)
+    hazeGradient.addColorStop(0, 'rgba(255,248,230,0.36)')
+    hazeGradient.addColorStop(0.38, 'rgba(246,235,211,0.17)')
     hazeGradient.addColorStop(1, 'rgba(238,224,198,0)')
     hazeContext.fillStyle = hazeGradient
     hazeContext.fillRect(0, 0, 96, 96)
     const hazeTexture = new T.CanvasTexture(hazeCanvas)
     hazeTexture.colorSpace = T.SRGBColorSpace
-    const hazeCount = quality.mobile ? 4 : 8
-    const veilCount = quality.mobile ? 2 : 3
+    const hazeCount = quality.mobile ? 3 : 6
+    const veilCount = quality.mobile ? 1 : 2
     for (let i = 0; i < hazeCount; i += 1) {
       const material = new T.SpriteMaterial({
         map: hazeTexture,
-        color: new T.Color().setHSL(0.105 + i * 0.0025, 0.3, 0.88 + (i % 3) * 0.025),
+        color: new T.Color().setHSL(0.105 + i * 0.0025, 0.26, 0.86 + (i % 3) * 0.02),
         transparent: true,
         opacity: 0,
         depthWrite: false,
@@ -435,7 +507,7 @@ class FlourSystem {
       sprite.frustumCulled = false
       sprite.renderOrder = i < veilCount ? 12 : 0
       this.group.add(sprite)
-      this.haze.push({ sprite, material, phase: random() * Math.PI * 2, near: random(), scale: 0.7 + random() * 0.85 })
+      this.haze.push({ sprite, material, phase: random() * Math.PI * 2, near: random(), scale: 0.62 + random() * 0.68 })
     }
     const pileGeometry = new T.SphereGeometry(1, 48, 24)
     const pos = pileGeometry.attributes.position
@@ -449,69 +521,121 @@ class FlourSystem {
       pos.setXYZ(i, x * 0.96 * perimeter, y < 0 ? 0 : Math.max(0, mound + granular), z * 0.68 * perimeter)
     }
     pileGeometry.computeVertexNormals()
-    this.pile = mesh(pileGeometry, mat(PALETTE.flour, quality, 'flour', { roughness: 1 }), this.group)
+    const pileMaterial = mat(PALETTE.flour, quality, 'flour', { roughness: 1 })
+    const mainMound = mesh(pileGeometry, pileMaterial, this.pile)
+    mainMound.name = 'flour-pile-mound'
+    const shoulder = mesh(pileGeometry.clone(), pileMaterial, this.pile, -0.27, 0.002, 0.08)
+    shoulder.scale.set(0.42, 0.62, 0.46)
+    shoulder.rotation.y = -0.34
+    const spill = mesh(pileGeometry.clone(), pileMaterial, this.pile, 0.3, 0.001, 0.02)
+    spill.scale.set(0.34, 0.45, 0.38)
+    spill.rotation.y = 0.48
     this.pile.name = 'flour-pile'
+    this.group.add(this.pile)
     dust(this.pile, quality, quality.mobile ? 34 : 58, 1.12, 0.008)
     this.pileShadow = contactShadow(this.group, 1.8, 1.15)
-    this.pileShadow.material.opacity = 0.24
+    this.pileShadow.material.opacity = 0.19
   }
 
-  update(p: number, time: number, outlet: T.Vector3, bowlTarget: T.Vector3) {
-    const emitted = windowProgress(p, 0.288, 0.405, (t) => t * t * (2 - t))
-    const transfer = windowProgress(p, 0.42, 0.51, (t) => t * t)
-    const amount = windowProgress(p, 0.3, 0.405) * (1 - windowProgress(p, 0.425, 0.475))
-    this.group.visible = p >= 0.278 && p <= 0.52
-    this.pile.position.set(-0.65, 0, 0.85)
-    this.pile.scale.setScalar(Math.max(0.001, Math.cbrt(amount)))
-    this.pile.visible = amount > 0.0001
-    this.pileShadow.position.set(-0.65, 0.002, 0.85)
-    this.pileShadow.scale.setScalar(Math.max(0.001, Math.sqrt(amount)))
+  update(
+    p: number,
+    time: number,
+    outlet: T.Vector3,
+    receivingPoint: T.Vector3,
+    millCenter: T.Vector3,
+    stoneRotation: number,
+  ) {
+    const grinding = windowProgress(p, 0.276, 0.316) * (1 - windowProgress(p, 0.41, 0.442))
+    const streamBuild = windowProgress(p, 0.3, 0.354, (value) => value * value * (2 - value))
+    const streamPresence = streamBuild * (1 - windowProgress(p, 0.416, 0.447))
+    const impactBuild = windowProgress(p, 0.322, 0.405)
+    const atmosphere = windowProgress(p, 0.342, 0.418) * (1 - windowProgress(p, 0.463, 0.505))
+    const transitionVeil = windowProgress(p, 0.397, 0.432) * (1 - windowProgress(p, 0.448, 0.486))
+    const pileGrowth = windowProgress(p, 0.318, 0.413, (value) => value * value * (2 - value))
+    const pilePresence = pileGrowth * (1 - windowProgress(p, 0.44, 0.478))
+    this.group.visible = p >= 0.27 && p <= 0.51
+    this.pile.position.copy(receivingPoint)
+    const pileScale = Math.max(0.001, Math.cbrt(pileGrowth))
+    this.pile.scale.set(pileScale * 0.58, pileScale * 0.62, pileScale * 0.58)
+    this.pile.visible = pilePresence > 0.0001
+    this.pileShadow.position.set(receivingPoint.x, receivingPoint.y + 0.002, receivingPoint.z)
+    this.pileShadow.scale.setScalar(Math.max(0.001, Math.sqrt(pileGrowth) * 0.58))
     this.pileShadow.visible = this.pile.visible
+    this.pileShadow.material.opacity = pilePresence * 0.19
     if (!this.group.visible) return
-    const cloudMask = windowProgress(p, 0.318, 0.372) * (1 - windowProgress(p, 0.472, 0.515))
-    const hazePresence = Math.max(bell(emitted, 0.58, 0.58) * (1 - transfer) * 0.55, cloudMask, bell(transfer))
-    const transitionVeil = windowProgress(p, 0.405, 0.437) * (1 - windowProgress(p, 0.448, 0.482))
-    const veilCount = this.haze.length <= 4 ? 2 : 3
+
+    this.grindingParticles.forEach((particle, index) => {
+      const angle = particle.angle + stoneRotation * (0.23 + particle.weight * 0.12)
+      const flutter = Math.sin(time * (0.8 + particle.weight * 0.7) + particle.phase) * particle.turbulence
+      const radius = particle.radius + flutter
+      this.grinding.positions.setXYZ(
+        index,
+        millCenter.x + Math.cos(angle) * radius,
+        millCenter.y + 0.405 + (particle.near - 0.5) * 0.07 + Math.sin(particle.phase + stoneRotation) * 0.016,
+        millCenter.z + Math.sin(angle) * radius,
+      )
+      this.grinding.alphas.setX(index, grinding * (0.025 + particle.weight * 0.12))
+    })
+    this.grinding.positions.needsUpdate = this.grinding.alphas.needsUpdate = true
+
+    this.source.copy(outlet)
+    this.streamParticles.forEach((particle, index) => {
+      const active = streamBuild >= particle.delay * 0.88 ? 1 : 0
+      const cycle = ((particle.phase + p * (17 + particle.weight * 7)) % 1 + 1) % 1
+      const fall = cycle
+      const spread = (0.015 + particle.radius * 0.14) * (0.3 + fall * 0.7)
+      this.destination.set(
+        receivingPoint.x + Math.cos(particle.angle) * spread,
+        receivingPoint.y + 0.012 + particle.weight * 0.012,
+        receivingPoint.z + Math.sin(particle.angle) * spread * 0.72,
+      )
+      temp.lerpVectors(this.source, this.destination, fall)
+      temp.y = this.source.y + (this.destination.y - this.source.y) * fall * fall
+      const turbulence = Math.sin(particle.phase * 21 + fall * 7.2 + time * 0.28) * particle.turbulence * fall
+      temp.x += turbulence
+      temp.z += Math.cos(particle.phase * 17 + fall * 5.4) * particle.turbulence * fall * 0.62
+      const edgeFade = windowProgress(fall, 0, 0.08) * (1 - windowProgress(fall, 0.9, 1))
+      this.stream.positions.setXYZ(index, temp.x, temp.y, temp.z)
+      this.stream.alphas.setX(index, active * streamPresence * edgeFade * (0.18 + particle.weight * 0.46))
+    })
+    this.stream.positions.needsUpdate = this.stream.alphas.needsUpdate = true
+
+    const impactPresence = Math.max(streamPresence * 0.72, atmosphere * 0.58, transitionVeil * 0.42)
+    this.impactParticles.forEach((particle, index) => {
+      const cycle = ((particle.phase + p * (10 + particle.weight * 4)) % 1 + 1) % 1
+      const rise = Math.sin(cycle * Math.PI)
+      const radial = particle.radius * (0.035 + impactBuild * 0.48) * Math.sqrt(cycle)
+      const drift = Math.sin(time * 0.2 + particle.phase * 11) * particle.turbulence * atmosphere
+      this.impact.positions.setXYZ(
+        index,
+        receivingPoint.x + Math.cos(particle.angle) * radial + drift,
+        receivingPoint.y + 0.014 + rise * (0.035 + impactBuild * (0.1 + particle.near * 0.2)),
+        receivingPoint.z + Math.sin(particle.angle) * radial * 0.68 + drift * 0.6,
+      )
+      const edgeFade = windowProgress(cycle, 0, 0.12) * (1 - windowProgress(cycle, 0.78, 1))
+      const activation = impactBuild >= particle.delay * 0.82 ? 1 : 0
+      this.impact.alphas.setX(index, activation * impactPresence * edgeFade * (0.045 + particle.weight * 0.2))
+    })
+    this.impact.positions.needsUpdate = this.impact.alphas.needsUpdate = true
+
+    const veilCount = this.haze.length <= 3 ? 1 : 2
     this.haze.forEach((entry, index) => {
       const nearPass = Math.pow(entry.near, 1.6)
       const isVeil = index < veilCount
       const opacity = isVeil
-        ? Math.max(hazePresence * (0.18 + nearPass * 0.2), transitionVeil * (0.42 + nearPass * 0.18))
-        : hazePresence * (0.22 + nearPass * 0.32)
+        ? Math.max(atmosphere * (0.055 + nearPass * 0.08), transitionVeil * (0.22 + nearPass * 0.12))
+        : atmosphere * (0.07 + nearPass * 0.13)
       entry.sprite.visible = opacity > 0.003
       entry.material.opacity = opacity
       entry.sprite.position.set(
-        T.MathUtils.lerp(-0.35, bowlTarget.x, transfer) + Math.sin(entry.phase + transfer * 3 + time * 0.08) * (0.56 + nearPass * 0.28),
-        0.42 + nearPass * 0.88 - transfer * (0.08 + nearPass * 0.24) + Math.cos(entry.phase + time * (0.14 + nearPass * 0.08)) * 0.13,
-        1.8 + nearPass * 2.1 + Math.sin(index * 1.7) * 0.16,
+        receivingPoint.x + Math.sin(entry.phase + time * 0.08) * (0.18 + nearPass * 0.42),
+        receivingPoint.y + 0.18 + nearPass * 0.62 + Math.cos(entry.phase + time * (0.12 + nearPass * 0.06)) * 0.09,
+        receivingPoint.z + 0.1 + nearPass * 1.62 + Math.sin(index * 1.7) * 0.08,
       )
-      const scale = entry.scale * (1.2 + nearPass * 1.5) * (1 + hazePresence * 0.55)
-      entry.sprite.scale.set(scale, scale * (0.58 + (index % 3) * 0.08), 1)
+      const scale = entry.scale * (0.52 + atmosphere * 0.92 + transitionVeil * 0.78) * (1 + nearPass * 0.72)
+      entry.sprite.scale.set(scale, scale * (0.48 + (index % 3) * 0.09), 1)
       entry.material.rotation = entry.phase * 0.18 + time * (index % 2 === 0 ? 0.018 : -0.013)
     })
-    this.particles.forEach((particle, i) => {
-      const flow = clamp01((emitted - particle.delay * 0.72) / 0.28)
-      const pour = clamp01((transfer - particle.delay * 0.65) / 0.35)
-      this.source.copy(outlet)
-      this.destination.set(-0.65 + particle.x, particle.y, 0.85 + particle.z)
-      const fall = flow * flow
-      temp.lerpVectors(this.source, this.destination, fall)
-      let alpha = flow > 0 && flow < 1 ? 0.2 + particle.weight * 0.4 : 0
-      if (transfer > 0) {
-        this.source.copy(this.destination)
-        this.destination.copy(bowlTarget).add(temp2.set(particle.x * 0.7, particle.y * 0.18, particle.z * 0.68))
-        arcPosition(this.source, this.destination, pour, 0.65, temp)
-        const foregroundPass = bell(pour) * Math.pow(particle.near, 4)
-        temp.z += foregroundPass * (1.2 + particle.near * 1.55)
-        temp.y += foregroundPass * (0.1 + particle.weight * 0.55)
-        temp.x += Math.sin(particle.phase) * foregroundPass * 0.46
-        alpha = pour > 0 && pour < 1 ? 0.22 + particle.weight * 0.42 + foregroundPass * 0.22 : 0
-      }
-      const drift = Math.sin(time * (0.34 + particle.near * 0.32) + particle.phase) * (0.008 + particle.near * 0.022) * alpha
-      this.positions.setXYZ(i, temp.x + drift, temp.y + Math.cos(time * 0.28 + particle.phase) * drift * 0.6, temp.z + drift)
-      this.alphas.setX(i, alpha)
-    })
-    this.positions.needsUpdate = this.alphas.needsUpdate = true
   }
 }
 
@@ -754,8 +878,18 @@ function mill(quality: QualityConfig) {
   ring(0.49, 0.023, mat(0x704629, quality, 'wood', { roughness: 0.9 }), group, 1.63)
   ring(0.145, 0.016, mat(0x5e3c28, quality, undefined, { roughness: 0.92 }), group, 1.07)
   mesh(new T.CylinderGeometry(0.28, 0.28, 0.03, 24), mat(0x8b5a34, quality, 'wood'), group, 0, 1.53, 0)
-  const outlet = new T.Vector3(0.25, 0.2, 1.12)
-  mesh(roundBox(0.42, 0.84, 0.065, 0.045), mat(0x936039, quality, 'wood'), group, outlet.x, outlet.y, outlet.z).rotation.x = 0.2
+  const chute = new T.Group()
+  chute.position.set(0.25, 0.3, 1.15)
+  chute.rotation.x = 0.18
+  group.add(chute)
+  const chuteWood = mat(0x936039, quality, 'wood', { roughness: 0.88, bumpScale: 0.009 })
+  const chuteEdge = mat(0x6d4025, quality, 'wood', { roughness: 0.92, bumpScale: 0.008 })
+  mesh(roundBox(0.46, 0.82, 0.055, 0.04), chuteWood, chute)
+  mesh(new T.BoxGeometry(0.042, 0.105, 0.77), chuteEdge, chute, -0.205, 0.052, 0)
+  mesh(new T.BoxGeometry(0.042, 0.105, 0.77), chuteEdge, chute, 0.205, 0.052, 0)
+  const chuteMouth = mesh(new T.BoxGeometry(0.37, 0.075, 0.038), mat(0x2f1c12, quality, undefined, { roughness: 0.98 }), chute, 0, 0.025, 0.4)
+  chuteMouth.castShadow = false
+  const outlet = new T.Vector3(0, 0.015, 0.43).applyEuler(chute.rotation).add(chute.position)
   const shadow = contactShadow(group, 2.85, 2.45)
   shadow.scale.set(1.08, 1, 1)
   shadow.material.opacity = 0.82
@@ -1201,6 +1335,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   const kernelFocus = new T.Vector3(0, 1.5, 0.65)
   const hopper = new T.Vector3()
   const outlet = new T.Vector3()
+  const flourReceivingPoint = new T.Vector3()
   const bowlTarget = new T.Vector3()
   const doughInBowl = new T.Vector3(0, 0.48, 0.18)
   const doughOnBoard = new T.Vector3(0, 0.002, 0.12)
@@ -1258,7 +1393,9 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       kernel.position.lerpVectors(kernelHome, kernelFocus, extract)
       kernel.scale.setScalar(0.11 + extract * 0.64)
       kernel.rotation.set(0.06 * extract, 0.08 * extract, -0.43 + extract * 1.12)
-      millModel.group.position.set(0.12 + (1 - millEnter) * 0.34 - millExit * 0.1, 0, -0.4 - (1 - millEnter) * 2.55 - millExit * 0.65)
+      // Once established, the mill remains physically planted. Flour and the
+      // camera mask its departure rather than sliding the entire machine away.
+      millModel.group.position.set(0.12 + (1 - millEnter) * 0.34, 0, -0.4 - (1 - millEnter) * 2.55)
       visibility.mill.set(windowProgress(p, 0.178, 0.228) * (1 - windowProgress(p, 0.423, 0.448)))
       hopper.set(millModel.group.position.x, 1.21, millModel.group.position.z)
       if (feed > 0) {
@@ -1271,6 +1408,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const grind = windowProgress(p, 0.284, 0.405, (value) => value * value * (2 - value))
       millModel.rotor.rotation.y = grind * Math.PI * 9 + Math.sin(ambient * 0.35) * 0.014 * bell(grind)
       outlet.copy(millModel.outlet).add(millModel.group.position)
+      flourReceivingPoint.set(outlet.x + 0.018, 0.006, outlet.z + 0.055)
       visibility.top.set(windowProgress(p, 0.205, 0.255) * (1 - windowProgress(p, 0.8, 0.845)))
 
       const bowlReveal = windowProgress(p, 0.432, 0.492)
@@ -1284,7 +1422,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       bowlShadow.material.opacity = bowlPresence * 0.86
       bowlShadow.visible = bowlShadow.material.opacity > 0.002
       bowlTarget.copy(bowlModel.group.position).add(temp.set(0, 0.16, 0))
-      flour.update(p, ambient, outlet, bowlTarget)
+      flour.update(p, ambient, outlet, flourReceivingPoint, millModel.group.position, millModel.rotor.rotation.y)
       const fill = windowProgress(p, 0.432, 0.49)
       const mixing = windowProgress(p, 0.502, 0.575)
       const dryToWet = windowProgress(p, 0.502, 0.542)
