@@ -7,7 +7,10 @@ export function getQualityConfig(): QualityConfig {
   const gl = probe.getContext('webgl2') ?? probe.getContext('webgl')
   const maxTextureSize = gl?.getParameter(gl.MAX_TEXTURE_SIZE) ?? 2048
   const maxSamples = gl && 'MAX_SAMPLES' in gl ? gl.getParameter((gl as WebGL2RenderingContext).MAX_SAMPLES) : 0
-  const capable = !mobile && maxTextureSize >= 4096 && maxSamples >= 4
+  const rendererInfo = gl?.getExtension('WEBGL_debug_renderer_info')
+  const rendererName = rendererInfo ? String(gl?.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL) ?? '') : ''
+  const softwareRenderer = /swiftshader|llvmpipe|software|basic render/i.test(rendererName)
+  const capable = !mobile && !softwareRenderer && maxTextureSize >= 4096 && maxSamples >= 4
   const tier = mobile ? 'mobile' : capable ? 'high' : 'balanced'
   gl?.getExtension('WEBGL_lose_context')?.loseContext()
 

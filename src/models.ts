@@ -12,6 +12,7 @@ import {
 } from './motion'
 import type { PointerState, QualityConfig } from './types'
 import { PALETTE, pointsMaterial } from './geometry'
+import { material as mat, surfaceTextures, type SurfaceTextures } from './materials'
 
 export type SequenceContext = {
   progress: number
@@ -29,9 +30,9 @@ export type JourneySequence = {
 const temp = new T.Vector3()
 const temp2 = new T.Vector3()
 const SCORE_SPECS = [
-  { center: -0.6, width: 0.92, depth: 1.03 },
-  { center: -0.01, width: 1.08, depth: 1.12 },
-  { center: 0.58, width: 0.86, depth: 0.96 },
+  { center: -0.52, width: 0.9, depth: 1.0 },
+  { center: 0, width: 1.05, depth: 1.1 },
+  { center: 0.5, width: 0.84, depth: 0.94 },
 ] as const
 
 function createRandom(initial: number) {
@@ -43,102 +44,6 @@ function createRandom(initial: number) {
 }
 
 let random = createRandom(4937)
-const textureCache = new Map<string, T.CanvasTexture>()
-
-function surface(kind: 'wood' | 'stone' | 'flour' | 'crust' | 'crumb', anisotropy: number) {
-  const cached = textureCache.get(kind)
-  if (cached) return cached
-
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = 512
-  const context = canvas.getContext('2d')!
-  const noise = createRandom(kind.length * 431)
-  const base = { wood: '#e1d1b8', stone: '#d8d5ca', flour: '#fffaf0', crust: '#e7c690', crumb: '#f8e2b4' }[kind]
-  context.fillStyle = base
-  context.fillRect(0, 0, 512, 512)
-
-  // Broad, low-frequency value changes keep the procedural surfaces from reading
-  // as noise stamped on primitives. Fine marks are reserved for tactile breakup.
-  const broad = context.createLinearGradient(0, 0, kind === 'wood' ? 512 : 340, 512)
-  broad.addColorStop(0, kind === 'flour' ? 'rgba(255,250,236,0.045)' : kind === 'crumb' ? 'rgba(255,246,216,0.11)' : 'rgba(255,248,224,0.12)')
-  broad.addColorStop(0.45, kind === 'flour' ? 'rgba(91,72,45,0.012)' : kind === 'crumb' ? 'rgba(155,92,43,0.025)' : 'rgba(70,39,18,0.025)')
-  broad.addColorStop(1, kind === 'flour' ? 'rgba(54,42,25,0.028)' : kind === 'crumb' ? 'rgba(99,50,22,0.07)' : 'rgba(21,15,10,0.09)')
-  context.fillStyle = broad
-  context.fillRect(0, 0, 512, 512)
-
-  for (let i = 0; i < (kind === 'flour' ? 4300 : kind === 'crumb' ? 2400 : 5900); i += 1) {
-    const x = noise() * 512
-    const y = noise() * 512
-    const alpha = kind === 'flour' ? noise() * 0.04 : kind === 'crumb' ? 0.012 + noise() * 0.052 : 0.02 + noise() * 0.075
-    context.fillStyle = noise() > 0.5 ? `rgba(255,247,226,${alpha})` : kind === 'crumb' ? `rgba(121,69,31,${alpha * 0.72})` : `rgba(38,22,10,${alpha * 0.8})`
-    const markWidth = kind === 'wood' ? 14 + noise() * 64 : kind === 'crust' ? 1 + noise() * 4 : 1 + noise() * 2
-    context.fillRect(x, y, markWidth, kind === 'wood' ? 0.65 : 0.8 + noise() * 1.6)
-  }
-
-  if (kind === 'wood') {
-    for (let i = 0; i < 34; i += 1) {
-      const y = noise() * 512
-      context.strokeStyle = `rgba(66,34,17,${0.045 + noise() * 0.085})`
-      context.lineWidth = 0.7 + noise() * 1.6
-      context.beginPath()
-      context.moveTo(-20, y)
-      context.bezierCurveTo(150, y - 11, 350, y + 13, 532, y + noise() * 10)
-      context.stroke()
-    }
-    for (let knot = 0; knot < 2; knot += 1) {
-      const x = 100 + noise() * 320
-      const y = 80 + noise() * 350
-      context.strokeStyle = 'rgba(73,38,18,0.11)'
-      context.lineWidth = 2
-      context.beginPath()
-      context.ellipse(x, y, 25 + noise() * 18, 7 + noise() * 5, 0, 0, Math.PI * 2)
-      context.stroke()
-    }
-  } else if (kind === 'stone') {
-    for (let i = 0; i < 22; i += 1) {
-      const y = noise() * 512
-      context.strokeStyle = `rgba(61,56,48,${0.025 + noise() * 0.055})`
-      context.lineWidth = 2 + noise() * 5
-      context.beginPath()
-      context.moveTo(-30, y)
-      context.bezierCurveTo(120, y + 35, 330, y - 28, 542, y + 12)
-      context.stroke()
-    }
-  } else if (kind === 'crumb') {
-    for (let i = 0; i < 150; i += 1) {
-      const x = noise() * 512
-      const y = noise() * 512
-      const radius = 0.8 + Math.pow(noise(), 2.2) * 4.2
-      context.fillStyle = `rgba(113,61,28,${0.045 + noise() * 0.11})`
-      context.beginPath()
-      context.ellipse(x, y, radius, radius * (0.55 + noise() * 0.5), noise() * Math.PI, 0, Math.PI * 2)
-      context.fill()
-    }
-  }
-
-  const texture = new T.CanvasTexture(canvas)
-  texture.colorSpace = T.SRGBColorSpace
-  texture.wrapS = texture.wrapT = T.RepeatWrapping
-  texture.repeat.set(kind === 'wood' ? 1 : 1.25, kind === 'wood' ? 1 : 1.25)
-  texture.anisotropy = anisotropy
-  textureCache.set(kind, texture)
-  return texture
-}
-
-function mat(color: T.ColorRepresentation, quality: QualityConfig, kind?: 'wood' | 'stone' | 'flour' | 'crust' | 'crumb', options: T.MeshStandardMaterialParameters = {}) {
-  return new T.MeshStandardMaterial({
-    color,
-    roughness: 0.84,
-    metalness: 0.01,
-    transparent: true,
-    ...(kind ? {
-      map: surface(kind, quality.anisotropy),
-      bumpMap: surface(kind, quality.anisotropy),
-      bumpScale: kind === 'stone' ? 0.034 : kind === 'crust' ? 0.022 : kind === 'wood' ? 0.014 : kind === 'crumb' ? 0.012 : 0.006,
-    } : {}),
-    ...options,
-  })
-}
 
 function mesh<G extends T.BufferGeometry, M extends T.Material>(geometry: G, materialInstance: M, parent?: T.Object3D, x = 0, y = 0, z = 0) {
   const object = new T.Mesh(geometry, materialInstance)
@@ -224,6 +129,39 @@ function irregularCylinderGeometry(top: number, bottom: number, height: number, 
   return geometry
 }
 
+function taperedWaterGeometry() {
+  const segments = 18
+  const sides = 9
+  const positions: number[] = []
+  const indices: number[] = []
+  for (let segment = 0; segment <= segments; segment += 1) {
+    const t = segment / segments
+    const y = t - 0.5
+    const centerX = Math.sin(t * Math.PI) * 0.022 + Math.sin(t * Math.PI * 2.2) * 0.004
+    const centerZ = Math.sin(t * Math.PI * 1.3) * 0.008
+    const radius = T.MathUtils.lerp(0.035, 0.018, t) * (1 + Math.sin(t * Math.PI * 3) * 0.045)
+    for (let side = 0; side < sides; side += 1) {
+      const angle = side / sides * Math.PI * 2
+      positions.push(centerX + Math.cos(angle) * radius, y, centerZ + Math.sin(angle) * radius)
+    }
+  }
+  for (let segment = 0; segment < segments; segment += 1) {
+    for (let side = 0; side < sides; side += 1) {
+      const nextSide = (side + 1) % sides
+      const a = segment * sides + side
+      const b = segment * sides + nextSide
+      const c = (segment + 1) * sides + side
+      const d = (segment + 1) * sides + nextSide
+      indices.push(a, c, b, b, c, d)
+    }
+  }
+  const geometry = new T.BufferGeometry()
+  geometry.setAttribute('position', new T.Float32BufferAttribute(positions, 3))
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+  return geometry
+}
+
 function dust(parent: T.Object3D, quality: QualityConfig, count: number, radius = 1.3, y = 0.006) {
   const geometry = new T.CircleGeometry(0.013, 6)
   geometry.rotateX(-Math.PI / 2)
@@ -279,12 +217,15 @@ class DoughMorph {
   private readonly original: Float32Array
   private readonly position: T.BufferAttribute
   private readonly colors: T.BufferAttribute
+  private readonly doughSurface: SurfaceTextures
+  private readonly crustSurface: SurfaceTextures
+  private showingCrustSurface = false
   private lastProgress = -1
   private readonly color = new T.Color()
   private readonly pale = new T.Color(PALETTE.flour)
   private readonly wet = new T.Color(0xd8ae72)
   private readonly proofed = new T.Color(0xe5bb78)
-  private readonly crust = new T.Color(0xb96222)
+  private readonly crust = new T.Color(0xc67d34)
   private readonly toasted = new T.Color(0x5d240f)
   private readonly cut = new T.Color(0xf0c887)
   private readonly raised = new T.Color(0xf2b85d)
@@ -297,7 +238,9 @@ class DoughMorph {
     this.original = new Float32Array(this.position.array)
     this.colors = new T.BufferAttribute(new Float32Array(this.position.count * 3), 3)
     geometry.setAttribute('color', this.colors)
-    this.mesh = mesh(geometry, mat(0xffffff, quality, 'flour', {
+    this.doughSurface = surfaceTextures('dough', quality)
+    this.crustSurface = surfaceTextures('crust', quality)
+    this.mesh = mesh(geometry, mat(0xffffff, quality, 'dough', {
       vertexColors: true,
       roughness: 0.96,
       metalness: 0,
@@ -319,6 +262,15 @@ class DoughMorph {
     const scoring = windowProgress(p, 0.776, 0.803)
     const knead = windowProgress(p, 0.61, 0.69, (t) => t)
     const pressure = Math.sin(knead * Math.PI * 3) ** 2 * bell(knead)
+    const useCrustSurface = baking > 0.28
+    if (useCrustSurface !== this.showingCrustSurface) {
+      const surface = useCrustSurface ? this.crustSurface : this.doughSurface
+      this.mesh.material.map = surface.albedo
+      this.mesh.material.bumpMap = surface.height
+      this.mesh.material.roughnessMap = surface.roughness
+      this.mesh.material.needsUpdate = true
+      this.showingCrustSurface = useCrustSurface
+    }
     // Stop just shy of a mathematically flat collapse; the crumb face covers the
     // remaining cap while avoiding degenerate triangles in the persistent loaf.
     const sliceCut = windowProgress(p, 0.989, 0.997) * 0.9
@@ -338,16 +290,16 @@ class DoughMorph {
       const kneadFold = Math.sin(x * 6.5 + knead * 8) * localPress * crown * 0.06
       const foldAxis = x + z * 0.32 - T.MathUtils.lerp(-0.3, 0.26, knead)
       const foldRidge = (
-        Math.exp(-Math.pow((foldAxis + 0.16) / 0.22, 2)) * 0.09
-        - Math.exp(-Math.pow(foldAxis / 0.105, 2)) * 0.055
+        Math.exp(-Math.pow((foldAxis + 0.18) / 0.25, 2)) * 0.145
+        - Math.exp(-Math.pow((foldAxis - 0.015) / 0.12, 2)) * 0.082
       ) * crown * bell(knead)
       const wetEdge = Math.sin(x * 4.3 + z * 7.1) * mixing * (1 - mixing) * 0.038
-      const endTaper = 1 - (proof * 0.035 + spring * 0.12) * Math.pow(Math.abs(x), 1.55)
+      const endTaper = 1 - (proof * 0.045 + spring * 0.18) * Math.pow(Math.abs(x), 1.48)
       const asymmetry = 1 + proof * (0.052 * Math.sin(x * 2.2 + z * 2.7) + x * 0.028 - z * 0.018)
       const proofCrown = proof * crown * (0.024 * Math.sin(x * 3.1 - z * 2.4) + 0.018 * x)
       const handmadeCrown = baking * crown * (Math.sin(x * 2.7 + z * 3.6) * 0.012 + x * 0.008 - z * 0.006)
-      let py = foot * height * asymmetry * endTaper - localPress * crown * 0.16 + wetFold + kneadFold + foldRidge + proofCrown + handmadeCrown
-      let px = x * width * (1 + pressure * 0.12) + wetEdge * (0.4 + crown) + shaping * Math.sin(z * 3.2 + y) * 0.018
+      let py = foot * height * asymmetry * endTaper - localPress * crown * 0.225 + wetFold + kneadFold + foldRidge + proofCrown + handmadeCrown
+      let px = x * width * (1 + pressure * 0.15) + wetEdge * (0.4 + crown) + shaping * Math.sin(z * 3.2 + y) * 0.018
       const pz = z * depth * endTaper * (1 - pressure * 0.09) + wetEdge * 0.42
       if (px > 0.72) px = T.MathUtils.lerp(px, 0.72, sliceCut)
       const cutLine = px + pz * 0.42
@@ -355,7 +307,7 @@ class DoughMorph {
       let scoreCore = 0
       let scoreEdge = 0
       for (const score of SCORE_SPECS) {
-        const scoreWidth = (0.014 + spring * 0.038) * score.width
+        const scoreWidth = (0.014 + spring * 0.031) * score.width
         const distance = Math.abs(cutLine - score.center)
         groove = Math.max(groove, Math.exp(-Math.pow(distance / scoreWidth, 2)))
         scoreCore = Math.max(scoreCore, Math.exp(-Math.pow(distance / (scoreWidth * 0.34), 2)) * score.depth)
@@ -365,9 +317,9 @@ class DoughMorph {
       groove *= cutMask * scoring
       scoreCore *= cutMask * scoring
       scoreEdge *= cutMask * scoring
-      py -= groove * (0.024 + spring * 0.066)
+      py -= groove * (0.026 + spring * 0.058)
       const irregular = Math.sin(px * 21 + pz * 13) * Math.sin(pz * 31 - px * 9)
-      py += crown * baking * irregular * 0.009
+      py += crown * baking * irregular * 0.0055
       this.position.setXYZ(i, px, Math.max(0, py), pz)
 
       this.color.copy(this.pale).lerp(this.wet, mixing * (0.72 - shaping * 0.25))
@@ -376,10 +328,11 @@ class DoughMorph {
       this.color.lerp(this.proofed, shaping * 0.52 + proof * 0.2)
       const bakeVariation = clamp01(0.52 + crownAmount * 0.34 + x * 0.065 - z * 0.12 + irregular * 0.15)
       this.color.lerp(this.crust, baking * bakeVariation)
-      const toastMottle = Math.max(0, Math.sin(px * 8.5 - pz * 5.2) * Math.cos(pz * 10.5 + px * 2.7))
-      this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.68 + Math.max(0, z) * 0.11 + scoreCore * 0.34 + toastMottle * crownAmount * 0.08))
-      this.color.lerp(this.cut, groove * baking * 0.86)
-      this.color.lerp(this.raised, scoreEdge * baking * 0.82)
+      const toastMottle = Math.max(0, Math.sin(px * 5.2 + pz * 4.1 + Math.sin(pz * 2.7)) * Math.cos(pz * 6.1 - px * 3.4) - 0.08)
+      this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.74 + Math.max(0, z) * 0.075 + scoreCore * 0.33 + toastMottle * crownAmount * 0.045))
+      this.color.lerp(this.cut, groove * baking * 0.72)
+      this.color.lerp(this.toasted, scoreCore * baking * 0.76)
+      this.color.lerp(this.raised, scoreEdge * baking * 0.8)
       const flour = Math.max(0, Math.sin(px * 12 + pz * 7) * Math.sin(pz * 18 - px * 3.5) - 0.34)
       this.color.lerp(this.pale, flour * crownAmount * baking * (1 - groove) * 0.4)
       this.colors.setXYZ(i, this.color.r, this.color.g, this.color.b)
@@ -562,22 +515,63 @@ class FlourSystem {
   }
 }
 
+function heroWheatGrainGeometry() {
+  const geometry = new T.SphereGeometry(1, 12, 9)
+  const positions = geometry.attributes.position
+  for (let index = 0; index < positions.count; index += 1) {
+    const x = positions.getX(index)
+    const y = positions.getY(index)
+    const z = positions.getZ(index)
+    const taper = 0.76 + (1 - Math.pow(Math.abs(y), 1.45)) * 0.24
+    const shoulder = 1 + y * 0.045 + Math.sin(y * 3.4) * 0.018
+    positions.setXYZ(index, x * taper * shoulder + (1 - y * y) * 0.055, y, z * taper * 0.88)
+  }
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function wheatLeafGeometry(side: number, length: number, width: number, bend: number) {
+  const shape = new T.Shape()
+  shape.moveTo(0, 0)
+  shape.bezierCurveTo(side * width * 0.4, length * 0.18, side * (width + bend * 0.15), length * 0.52, side * bend, length)
+  shape.bezierCurveTo(side * (width * 0.34 + bend * 0.42), length * 0.6, side * width * 0.18, length * 0.2, 0, 0)
+  return new T.ShapeGeometry(shape, 7)
+}
+
 function wheatEar(parent: T.Object3D, quality: QualityConfig, height: number, seed: number) {
   const randomLocal = createRandom(seed)
   const ear = new T.Group()
   parent.add(ear)
   const stemMaterial = mat(0xba913f, quality, undefined, { roughness: 0.92 })
-  const kernelMaterial = mat(PALETTE.wheatLight, quality, 'crust', { roughness: 0.76, emissive: 0x6b450b, emissiveIntensity: 0.18 })
-  rod(new T.Vector3(0, 0, 0), new T.Vector3(0.035, height, 0), 0.014, stemMaterial, ear)
-  const kernelGeometry = new T.SphereGeometry(1, 12, 10)
+  const kernelMaterial = mat(PALETTE.wheatLight, quality, 'grain', { roughness: 0.76, emissive: 0x6b450b, emissiveIntensity: 0.13 })
+  tube([
+    new T.Vector3(0, 0, 0),
+    new T.Vector3(-0.018, height * 0.34, 0.008),
+    new T.Vector3(0.028, height * 0.69, -0.006),
+    new T.Vector3(0.035, height, 0),
+  ], 0.014, stemMaterial, ear)
+  const leafMaterial = mat(0x8d7d39, quality, undefined, { roughness: 0.96, side: T.DoubleSide })
+  const lowerLeaf = mesh(wheatLeafGeometry(-1, 1.08, 0.16, 0.5), leafMaterial, ear, -0.004, 0.68, 0.018)
+  lowerLeaf.rotation.y = -0.13
+  const upperLeaf = mesh(wheatLeafGeometry(1, 0.76, 0.115, 0.3), leafMaterial, ear, 0.018, 1.05, -0.012)
+  upperLeaf.rotation.y = 0.22
+  const kernelGeometry = heroWheatGrainGeometry()
   for (let row = 0; row < 9; row += 1) {
     for (const side of [-1, 1]) {
       if (row === 4 && side === 1) continue
       const y = height - 0.88 + row * 0.095
-      const kernel = mesh(kernelGeometry, kernelMaterial, ear, side * (0.062 - row * 0.003), y, 0)
-      kernel.scale.set(0.061 - row * 0.0018, 0.112 - row * 0.003, 0.064)
-      kernel.rotation.z = side * -0.43
-      rod(new T.Vector3(side * 0.085, y + 0.045, 0), new T.Vector3(side * (0.21 - row * 0.005), y + 0.39, 0), 0.003, stemMaterial, ear)
+      const kernel = mesh(kernelGeometry, kernelMaterial, ear, side * (0.062 - row * 0.003), y, (randomLocal() - 0.5) * 0.028)
+      const variation = 0.94 + randomLocal() * 0.12
+      kernel.scale.set((0.061 - row * 0.0018) * variation, (0.112 - row * 0.003) * variation, 0.064 * variation)
+      kernel.rotation.set((randomLocal() - 0.5) * 0.13, (randomLocal() - 0.5) * 0.18, side * (-0.4 - randomLocal() * 0.08))
+      const awnLength = (0.34 - row * 0.004) * (0.86 + randomLocal() * 0.28)
+      rod(
+        new T.Vector3(side * 0.085, y + 0.045, kernel.position.z),
+        new T.Vector3(side * (0.085 + awnLength * 0.37), y + 0.045 + awnLength, kernel.position.z + (randomLocal() - 0.5) * 0.045),
+        0.0026 + randomLocal() * 0.0008,
+        stemMaterial,
+        ear,
+      )
     }
   }
   tube([new T.Vector3(0, 0.78, 0), new T.Vector3(-0.19, 1.12, 0.06), new T.Vector3(-0.31, 1.43, 0.03)], 0.017, stemMaterial, ear)
@@ -600,7 +594,7 @@ function wheatField(quality: QualityConfig): WheatField {
   )
   const grain = new T.InstancedMesh(
     new T.SphereGeometry(1, 8, 6),
-    mat(PALETTE.wheat, quality, 'crust', { roughness: 0.84, emissive: 0x4b2c08, emissiveIntensity: 0.08 }),
+    mat(PALETTE.wheat, quality, 'grain', { roughness: 0.84, emissive: 0x4b2c08, emissiveIntensity: 0.065 }),
     count * 8,
   )
   const awn = new T.InstancedMesh(
@@ -695,30 +689,34 @@ function wheatField(quality: QualityConfig): WheatField {
 }
 
 function grainKernel(quality: QualityConfig, scale = 1) {
-  const profile = [[0.012, -0.59], [0.17, -0.53], [0.285, -0.32], [0.325, 0.02], [0.27, 0.34], [0.15, 0.54], [0.01, 0.62]]
+  const profile = [[0.008, -0.64], [0.12, -0.59], [0.27, -0.4], [0.345, -0.12], [0.355, 0.14], [0.3, 0.4], [0.18, 0.57], [0.045, 0.65], [0.008, 0.66]]
   const group = new T.Group()
-  const geometry = new T.LatheGeometry(profile.map(([radius, y]) => new T.Vector2(radius, y)), 48)
+  const geometry = new T.LatheGeometry(profile.map(([radius, y]) => new T.Vector2(radius, y)), quality.mobile ? 28 : quality.tier === 'high' ? 40 : 34)
   const positions = geometry.attributes.position
   for (let i = 0; i < positions.count; i += 1) {
     const x = positions.getX(i)
     const y = positions.getY(i)
     const z = positions.getZ(i)
     const angle = Math.atan2(z, x)
-    const shoulder = 1 + y * 0.065 + Math.sin(y * 4.2) * 0.022
-    const rib = 1 + Math.sin(angle * 3 + y * 2.1) * 0.014
-    positions.setXYZ(i, x * shoulder * rib + (1 - y * y) * 0.024, y, z * 0.69 * (1 - y * 0.045) * rib)
+    const shoulder = 1 + y * 0.075 + Math.sin(y * 4.2) * 0.024
+    const rib = 1 + Math.sin(angle * 3 + y * 2.1) * 0.012
+    const bodyX = x * shoulder * rib + (1 - y * y) * 0.03
+    const bodyZ = z * 0.71 * (1 - y * 0.05) * rib
+    const front = Math.max(0, Math.sin(angle))
+    const creaseIndent = Math.exp(-Math.pow(bodyX / 0.078, 2)) * front * (1 - Math.pow(Math.abs(y) / 0.68, 2)) * 0.072
+    positions.setXYZ(i, bodyX, y, bodyZ - Math.max(0, creaseIndent))
   }
   geometry.computeVertexNormals()
-  const seed = mesh(geometry, mat(0xe0ad4d, quality, 'crust', {
+  const seed = mesh(geometry, mat(0xe0ad4d, quality, 'grain', {
     roughness: 0.78,
     bumpScale: 0.012,
     emissive: 0x351a05,
     emissiveIntensity: 0.075,
   }), group)
   seed.scale.setScalar(scale)
-  const crease = tube([new T.Vector3(0.018, -0.45, 0.18), new T.Vector3(-0.006, -0.18, 0.218), new T.Vector3(0.012, 0.16, 0.213), new T.Vector3(-0.005, 0.44, 0.176)], 0.015, mat(0x624019, quality, undefined, { roughness: 0.98 }), group)
+  const crease = tube([new T.Vector3(0.018, -0.48, 0.174), new T.Vector3(-0.01, -0.2, 0.199), new T.Vector3(0.012, 0.15, 0.196), new T.Vector3(-0.004, 0.47, 0.166)], 0.012, mat(0x513113, quality, undefined, { roughness: 0.99 }), group)
   crease.scale.setScalar(scale)
-  const creaseEdge = tube([new T.Vector3(0.04, -0.41, 0.19), new T.Vector3(0.022, -0.12, 0.227), new T.Vector3(0.035, 0.2, 0.22), new T.Vector3(0.018, 0.4, 0.185)], 0.004, mat(0xf5cf78, quality, undefined, { roughness: 0.82 }), group)
+  const creaseEdge = tube([new T.Vector3(0.037, -0.42, 0.183), new T.Vector3(0.019, -0.12, 0.208), new T.Vector3(0.032, 0.2, 0.205), new T.Vector3(0.016, 0.42, 0.177)], 0.0035, mat(0xf5cf78, quality, undefined, { roughness: 0.82 }), group)
   creaseEdge.scale.setScalar(scale)
   return group
 }
@@ -734,6 +732,9 @@ function mill(quality: QualityConfig) {
   group.add(rotor)
   mesh(irregularCylinderGeometry(1.19, 1.25, 0.38, 48, 31), stone, group, 0, 0.2, 0)
   mesh(irregularCylinderGeometry(1.16, 1.2, 0.44, 48, 79), stone, rotor)
+  const stoneContact = mesh(new T.CircleGeometry(1.075, 48), new T.MeshBasicMaterial({ color: 0x171711, transparent: true, opacity: 0.28, depthWrite: false }), group, 0, 0.397, 0)
+  stoneContact.rotation.x = -Math.PI / 2
+  stoneContact.castShadow = stoneContact.receiveShadow = false
   ring(1.12, 0.042, mat(0x4e4d47, quality, 'stone', { roughness: 0.99 }), group, 0.025)
   ring(1.205, 0.028, stoneEdge, group, 0.37)
   ring(1.18, 0.025, stoneEdge, rotor, -0.2)
@@ -747,7 +748,7 @@ function mill(quality: QualityConfig) {
   rod(new T.Vector3(0, 0.74, 0), new T.Vector3(0, 1.78, 0), 0.052, iron, group)
   rod(new T.Vector3(0, 1.1, 0), new T.Vector3(0.88, 1.1, 0), 0.052, iron, rotor)
   rod(new T.Vector3(0.88, 1.08, 0), new T.Vector3(0.88, 1.5, 0), 0.09, mat(0x8e5a31, quality, 'wood', { roughness: 0.83 }), rotor)
-  const funnelWood = mat(0xae7949, quality, undefined, { side: T.DoubleSide, roughness: 0.86, emissive: 0x2b1609, emissiveIntensity: 0.08 })
+  const funnelWood = mat(0xae7949, quality, 'wood', { side: T.DoubleSide, roughness: 0.86, emissive: 0x2b1609, emissiveIntensity: 0.05 })
   const funnel = mesh(new T.CylinderGeometry(0.49, 0.14, 0.56, 4, 1, true), funnelWood, group, 0, 1.35, 0)
   funnel.rotation.y = Math.PI / 4 + 0.16
   ring(0.49, 0.023, mat(0x704629, quality, 'wood', { roughness: 0.9 }), group, 1.63)
@@ -764,7 +765,18 @@ function mill(quality: QualityConfig) {
 function bowl(quality: QualityConfig) {
   const group = new T.Group()
   const profile = [[0.48, -0.42], [0.82, -0.36], [1.16, -0.14], [1.3, 0.18], [1.25, 0.4], [1.08, 0.52], [0.96, 0.48], [1.0, 0.28], [0.9, 0.02], [0.72, -0.18], [0.44, -0.27]]
-  const shell = mesh(new T.LatheGeometry(profile.map(([radius, y]) => new T.Vector2(radius, y)), 48), mat(0xd8d1c0, quality, undefined, { roughness: 0.29, emissive: 0x17120b, emissiveIntensity: 0.025 }), group)
+  const shellGeometry = new T.LatheGeometry(profile.map(([radius, y]) => new T.Vector2(radius, y)), 48)
+  const shellPositions = shellGeometry.attributes.position
+  for (let index = 0; index < shellPositions.count; index += 1) {
+    const x = shellPositions.getX(index)
+    const y = shellPositions.getY(index)
+    const z = shellPositions.getZ(index)
+    const angle = Math.atan2(z, x)
+    const warp = 1 + Math.sin(angle * 3 + y * 2.1) * 0.005 + Math.cos(angle * 5 - y) * 0.0025
+    shellPositions.setXYZ(index, x * warp, y + Math.sin(angle * 2.2) * 0.003, z * warp)
+  }
+  shellGeometry.computeVertexNormals()
+  const shell = mesh(shellGeometry, mat(0xd8d1c0, quality, undefined, { roughness: 0.36, emissive: 0x17120b, emissiveIntensity: 0.018 }), group)
   shell.scale.z = 0.96
   const interior = mesh(new T.CircleGeometry(0.455, 40), mat(0xaaa69d, quality, undefined, { roughness: 0.58 }), group, 0, -0.265, 0)
   interior.rotation.x = -Math.PI / 2
@@ -772,6 +784,8 @@ function bowl(quality: QualityConfig) {
   flourSurface.rotation.x = -Math.PI / 2
   const rim = ring(1.14, 0.042, mat(0xf4ead6, quality, undefined, { roughness: 0.22, emissive: 0x2b2012, emissiveIntensity: 0.045 }), group, 0.48)
   rim.scale.set(1, 0.98, 1)
+  const innerLip = ring(1.045, 0.018, mat(0xb9b4a8, quality, undefined, { roughness: 0.48 }), group, 0.455)
+  innerLip.scale.set(1, 0.96, 1)
   ring(0.48, 0.035, mat(0xaaa598, quality, undefined, { roughness: 0.62 }), group, -0.4)
   return { group, flourSurface }
 }
@@ -918,12 +932,28 @@ function crumbFaceGeometry() {
   return new T.ShapeGeometry(face, 5)
 }
 
+function crumbPoreTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 64
+  const context = canvas.getContext('2d')!
+  const shadow = context.createRadialGradient(27, 25, 2, 32, 32, 29)
+  shadow.addColorStop(0, 'rgba(66,31,12,0.94)')
+  shadow.addColorStop(0.54, 'rgba(103,54,23,0.82)')
+  shadow.addColorStop(0.76, 'rgba(243,192,117,0.34)')
+  shadow.addColorStop(1, 'rgba(243,192,117,0)')
+  context.fillStyle = shadow
+  context.fillRect(0, 0, 64, 64)
+  const texture = new T.CanvasTexture(canvas)
+  texture.colorSpace = T.SRGBColorSpace
+  return texture
+}
+
 function breadCutDetails(quality: QualityConfig) {
   const group = new T.Group()
   group.name = 'bread-cut-reveal'
-  const crumbMaterial = mat(0xfff3d2, quality, 'crumb', { roughness: 0.97, side: T.DoubleSide, emissive: 0xffc77f, emissiveIntensity: 0.5 })
+  const crumbMaterial = mat(0xfff3d2, quality, 'crumb', { roughness: 0.97, side: T.DoubleSide, emissive: 0x4b2510, emissiveIntensity: 0.035 })
   const crustMaterial = mat(0x843515, quality, 'crust', { roughness: 0.94, bumpScale: 0.027 })
-  const poreMaterial = new T.MeshBasicMaterial({ color: 0x6d3919, transparent: true, opacity: 0.64, side: T.DoubleSide, depthWrite: false })
+  const poreMaterial = new T.MeshStandardMaterial({ map: crumbPoreTexture(), color: 0xffffff, roughness: 1, metalness: 0, transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false })
   const faceGeometry = crumbFaceGeometry()
   const mainCrustFace = mesh(faceGeometry, crustMaterial, group, 0.806, 0.43, 0)
   mainCrustFace.rotation.y = Math.PI / 2
@@ -949,11 +979,13 @@ function breadCutDetails(quality: QualityConfig) {
     patch.rotation.y = Math.PI / 2
     patch.scale.y = 0.62 + index * 0.12
   })
-  const porePositions = [[0.31, -0.14], [0.52, 0.08], [0.41, 0.21], [0.57, -0.24], [0.27, 0.18], [0.46, -0.02], [0.2, -0.2], [0.62, -0.08], [0.34, 0.04]]
+  const porePositions = [[0.3, -0.15], [0.53, 0.09], [0.4, 0.23], [0.58, -0.245], [0.245, 0.17], [0.455, -0.025], [0.19, -0.215], [0.65, -0.095], [0.35, 0.045], [0.72, 0.12], [0.29, 0.29]]
   porePositions.forEach(([y, z], index) => {
-    const pore = mesh(new T.CircleGeometry(0.014 + (index % 3) * 0.005, 8), poreMaterial, group, 0.824, y, z)
+    const pore = mesh(new T.CircleGeometry(1, 12), poreMaterial, group, 0.829 + (index % 3) * 0.0015, y, z)
     pore.rotation.y = Math.PI / 2
-    pore.scale.y = 0.72 + (index % 2) * 0.18
+    const radius = 0.017 + (index % 4) * 0.005
+    pore.scale.set(radius, radius * (0.58 + (index % 3) * 0.16), radius)
+    pore.rotation.x = (index % 2 ? -1 : 1) * 0.18
   })
   const sliceShadePatches = [[-0.04, -0.12, 0.075], [0.18, 0.15, 0.058]]
   sliceShadePatches.forEach(([y, z, radius], index) => {
@@ -961,11 +993,13 @@ function breadCutDetails(quality: QualityConfig) {
     patch.rotation.y = Math.PI / 2
     patch.scale.y = 0.66 + index * 0.15
   })
-  const slicePores = [[-0.12, -0.16], [0.1, 0.09], [0.23, -0.04], [-0.02, 0.22], [0.27, 0.2], [-0.2, 0.12], [0.16, -0.2], [-0.24, -0.05]]
+  const slicePores = [[-0.12, -0.16], [0.1, 0.09], [0.23, -0.04], [-0.02, 0.22], [0.27, 0.2], [-0.2, 0.12], [0.16, -0.2], [-0.24, -0.05], [0.31, 0.04], [-0.06, -0.01]]
   slicePores.forEach(([y, z], index) => {
-    const pore = mesh(new T.CircleGeometry(0.013 + (index % 3) * 0.004, 8), poreMaterial, slice, 0.154, y, z)
+    const pore = mesh(new T.CircleGeometry(1, 12), poreMaterial, slice, 0.158 + (index % 2) * 0.0015, y, z)
     pore.rotation.y = Math.PI / 2
-    pore.scale.y = 0.68 + (index % 2) * 0.2
+    const radius = 0.016 + (index % 3) * 0.005
+    pore.scale.set(radius, radius * (0.62 + (index % 4) * 0.12), radius)
+    pore.rotation.x = (index % 2 ? -1 : 1) * 0.16
   })
 
   const crumbs = Array.from({ length: 8 }, (_, index) => {
@@ -1039,7 +1073,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
 
   const worktop = new T.Group()
   worktop.name = 'shared-worktop'
-  board(worktop, quality, 5.5, 3.7, 0xa97950)
+  board(worktop, quality, 5.5, 3.7, 0x8f6749)
   dust(worktop, quality, quality.crumbCount, 1.9, 0.002)
   worktop.rotation.y = -0.018
   group.add(worktop)
@@ -1054,7 +1088,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   const waterGroup = jug(quality)
   group.add(waterGroup)
   const waterMaterial = mat(0xbcdce0, quality, undefined, { opacity: 0.65, roughness: 0.2, depthWrite: false })
-  const waterStream = mesh(new T.CylinderGeometry(0.021, 0.035, 1, 10), waterMaterial, group)
+  const waterStream = mesh(taperedWaterGeometry(), waterMaterial, group)
   waterStream.name = 'water-stream'
   const streamHighlight = mesh(new T.CylinderGeometry(0.004, 0.007, 0.94, 6), new T.MeshBasicMaterial({ color: 0xe6ffff, transparent: true, opacity: 0.5, depthWrite: false }), waterStream, 0.018, 0, 0)
   streamHighlight.castShadow = streamHighlight.receiveShadow = false
@@ -1069,7 +1103,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
 
   const mixtureClumps = new T.Group()
   mixtureClumps.name = 'forming-dough-clumps'
-  const clumpMaterial = mat(0xd3ab73, quality, 'flour', { roughness: 0.82, bumpScale: 0.012 })
+  const clumpMaterial = mat(0xd3ab73, quality, 'dough', { roughness: 0.82, bumpScale: 0.008 })
   const clumpSpecs = Array.from({ length: quality.mobile ? 5 : 8 }, (_, index) => {
     const clump = mesh(new T.IcosahedronGeometry(1, index % 3 === 0 ? 1 : 0), clumpMaterial, mixtureClumps)
     const angle = random() * Math.PI * 2
@@ -1243,7 +1277,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const bowlRecede = windowProgress(p, 0.592, 0.66)
       // The dough fills the foreground as the camera follows it out; finish the
       // bowl fade while it is still occluded instead of leaving a ghostly rim.
-      const bowlPresence = windowProgress(p, 0.437, 0.48) * (1 - windowProgress(p, 0.61, 0.646))
+      const bowlPresence = windowProgress(p, 0.437, 0.48) * (1 - windowProgress(p, 0.602, 0.633))
       bowlModel.group.position.set(0.32 * (1 - bowlReveal) - bowlRecede * 0.28, 0.43 - bowlRecede * 0.05, 0.18 - (1 - bowlReveal) * 2.6 - bowlRecede * 1.45)
       visibility.bowl.set(bowlPresence)
       bowlShadow.position.set(bowlModel.group.position.x, 0.004, bowlModel.group.position.z)
@@ -1272,6 +1306,8 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       waterStream.scale.set(1, waterStart.distanceTo(bowlTarget), 1)
       waterStream.visible = pouring > 0.01 && pouring < 0.99
       waterMaterial.opacity = bell(pouring) * 0.58
+      streamHighlight.position.x = 0.014 + Math.sin(ambient * 2.8 + pouring * Math.PI * 2) * 0.006
+      ;(streamHighlight.material as T.MeshBasicMaterial).opacity = bell(pouring) * 0.48
       const season = windowProgress(p, 0.498, 0.535, (value) => value * value)
       visibility.additions.set(overlap(p, 0.495, 0.542, 0.011))
       additionSeeds.forEach((seed) => {

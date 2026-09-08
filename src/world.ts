@@ -22,52 +22,39 @@ type ColorKeyframe = Keyframe<THREE.Color>
 
 const cameraPositionKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-0.82, 1.1, 5.25) },
-  { at: 0.08, value: new THREE.Vector3(-0.54, 1.2, 4.6) },
-  { at: 0.145, value: new THREE.Vector3(0.48, 1.68, 4.22), tension: 0.3 },
-  { at: 0.2, value: new THREE.Vector3(0.78, 1.75, 4.12), tension: 0.62 },
-  { at: 0.25, value: new THREE.Vector3(0.24, 1.62, 4.3) },
-  { at: 0.31, value: new THREE.Vector3(-0.68, 1.45, 4.74) },
-  { at: 0.38, value: new THREE.Vector3(-0.08, 1.72, 4.68) },
-  { at: 0.45, value: new THREE.Vector3(0.5, 2.4, 5.02) },
-  { at: 0.53, value: new THREE.Vector3(0.64, 2.4, 4.72) },
-  { at: 0.62, value: new THREE.Vector3(0.06, 1.88, 4.38) },
-  { at: 0.69, value: new THREE.Vector3(-0.38, 1.78, 4.22) },
+  { at: 0.095, value: new THREE.Vector3(-0.38, 1.3, 4.52) },
+  { at: 0.205, value: new THREE.Vector3(0.56, 1.72, 4.1), tension: 0.42 },
+  { at: 0.31, value: new THREE.Vector3(-0.34, 1.46, 4.72) },
+  { at: 0.405, value: new THREE.Vector3(0.05, 1.86, 4.78) },
+  { at: 0.5, value: new THREE.Vector3(0.55, 2.42, 4.88) },
+  { at: 0.62, value: new THREE.Vector3(0.04, 1.86, 4.36) },
   { at: 0.74, value: new THREE.Vector3(0.18, 2, 4.42), tension: 0.84 },
-  { at: 0.81, value: new THREE.Vector3(0.04, 1.84, 4.28) },
-  { at: 0.86, value: new THREE.Vector3(-0.5, 1.48, 4.04) },
-  { at: 0.92, value: new THREE.Vector3(0.08, 1.68, 4.34) },
-  { at: 0.955, value: new THREE.Vector3(0.66, 1.92, 4.7), tension: 0.22 },
-  { at: 0.98, value: new THREE.Vector3(1.72, 1.72, 4.96) },
-  { at: 1, value: new THREE.Vector3(2.9, 1.58, 4.5) },
+  { at: 0.855, value: new THREE.Vector3(-0.46, 1.5, 4.05) },
+  { at: 0.925, value: new THREE.Vector3(0.12, 1.7, 4.38) },
+  { at: 0.965, value: new THREE.Vector3(1.02, 1.84, 4.9), tension: 0.18 },
+  { at: 1, value: new THREE.Vector3(2.55, 1.62, 4.58) },
 ]
 
 const cameraLookKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-0.2, 1.48, -0.02) },
-  { at: 0.12, value: new THREE.Vector3(-0.1, 1.7, 0.28) },
-  { at: 0.2, value: new THREE.Vector3(0, 1.55, 0.55), tension: 0.62 },
-  { at: 0.245, value: new THREE.Vector3(0.05, 1.35, 0.1) },
+  { at: 0.13, value: new THREE.Vector3(-0.08, 1.69, 0.3) },
+  { at: 0.205, value: new THREE.Vector3(0, 1.54, 0.55), tension: 0.56 },
   { at: 0.31, value: new THREE.Vector3(0, 0.78, -0.35) },
-  { at: 0.38, value: new THREE.Vector3(-0.35, 0.42, 0.35) },
-  { at: 0.44, value: new THREE.Vector3(-0.1, 0.42, 0.65) },
-  { at: 0.49, value: new THREE.Vector3(0, 0.38, 0.18) },
-  { at: 0.6, value: new THREE.Vector3(0, 0.4, 0.14) },
+  { at: 0.405, value: new THREE.Vector3(-0.16, 0.42, 0.48) },
+  { at: 0.5, value: new THREE.Vector3(0, 0.38, 0.18) },
+  { at: 0.62, value: new THREE.Vector3(0, 0.4, 0.14) },
   { at: 0.74, value: new THREE.Vector3(0, 0.32, 0.14), tension: 0.85 },
-  { at: 0.8, value: new THREE.Vector3(0, 0.42, -0.35) },
   { at: 0.855, value: new THREE.Vector3(0, 0.68, -1.4) },
-  { at: 0.91, value: new THREE.Vector3(0, 0.58, -1.3) },
-  { at: 0.95, value: new THREE.Vector3(0.02, 0.42, 0.1), tension: 0.25 },
+  { at: 0.925, value: new THREE.Vector3(0, 0.56, -1.1) },
   { at: 1, value: new THREE.Vector3(0.02, 0.42, 0.47) },
 ]
 
 const cameraFovKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 32 },
-  { at: 0.14, value: 28 },
-  { at: 0.22, value: 27, tension: 0.55 },
+  { at: 0.19, value: 27, tension: 0.48 },
   { at: 0.31, value: 34 },
-  { at: 0.38, value: 32 },
   { at: 0.45, value: 36 },
-  { at: 0.53, value: 34 },
-  { at: 0.63, value: 31 },
+  { at: 0.62, value: 31 },
   { at: 0.74, value: 33, tension: 0.72 },
   { at: 0.855, value: 36 },
   { at: 0.93, value: 34 },
@@ -80,13 +67,51 @@ const backgroundKeys: ColorKeyframe[] = [
   { at: 0.17, value: new THREE.Color(0x293722) },
   { at: 0.25, value: new THREE.Color(0x35402b) },
   { at: 0.34, value: new THREE.Color(0x47473b) },
-  { at: 0.43, value: new THREE.Color(0x7f7b65) },
-  { at: 0.5, value: new THREE.Color(0xb0a58a) },
-  { at: 0.66, value: new THREE.Color(0xa59678) },
-  { at: 0.75, value: new THREE.Color(0x80735d) },
+  { at: 0.43, value: new THREE.Color(0x5f5949) },
+  { at: 0.5, value: new THREE.Color(0x776b57) },
+  { at: 0.66, value: new THREE.Color(0x6c5e48) },
+  { at: 0.75, value: new THREE.Color(0x554533) },
   { at: 0.82, value: new THREE.Color(0x21150f) },
   { at: 0.93, value: new THREE.Color(0x120b08) },
   { at: 1, value: new THREE.Color(0x080908) },
+]
+
+const backdropTopKeys: ColorKeyframe[] = [
+  { at: 0, value: new THREE.Color(0x080c0a) },
+  { at: 0.17, value: new THREE.Color(0x172418) },
+  { at: 0.32, value: new THREE.Color(0x3a392f) },
+  { at: 0.48, value: new THREE.Color(0x877f70) },
+  { at: 0.66, value: new THREE.Color(0x685b49) },
+  { at: 0.75, value: new THREE.Color(0x746047) },
+  { at: 0.83, value: new THREE.Color(0x130b08) },
+  { at: 1, value: new THREE.Color(0x050605) },
+]
+
+const backdropBottomKeys: ColorKeyframe[] = [
+  { at: 0, value: new THREE.Color(0x081008) },
+  { at: 0.17, value: new THREE.Color(0x273820) },
+  { at: 0.32, value: new THREE.Color(0x25251e) },
+  { at: 0.48, value: new THREE.Color(0x43392d) },
+  { at: 0.66, value: new THREE.Color(0x34291f) },
+  { at: 0.75, value: new THREE.Color(0x3d2d1f) },
+  { at: 0.83, value: new THREE.Color(0x090504) },
+  { at: 1, value: new THREE.Color(0x080504) },
+]
+
+const backdropGlowKeys: ColorKeyframe[] = [
+  { at: 0, value: new THREE.Color(0x9d7a32) },
+  { at: 0.22, value: new THREE.Color(0xd4a852) },
+  { at: 0.38, value: new THREE.Color(0xc2aa79) },
+  { at: 0.62, value: new THREE.Color(0xf0c98e) },
+  { at: 0.76, value: new THREE.Color(0xd8a45d) },
+  { at: 0.86, value: new THREE.Color(0xb53d16) },
+  { at: 1, value: new THREE.Color(0xa34b20) },
+]
+
+const backdropGlowStrengthKeys: SplineKeyframe<number>[] = [
+  { at: 0, value: 0.08 }, { at: 0.16, value: 0.17 }, { at: 0.34, value: 0.08 },
+  { at: 0.5, value: 0.085 }, { at: 0.68, value: 0.075 }, { at: 0.76, value: 0.07 },
+  { at: 0.86, value: 0.14 }, { at: 1, value: 0.11 },
 ]
 
 const keyLightColorKeys: ColorKeyframe[] = [
@@ -97,7 +122,7 @@ const keyLightColorKeys: ColorKeyframe[] = [
   { at: 0.74, value: new THREE.Color(0xf1c783) },
   { at: 0.82, value: new THREE.Color(0xf6c184) },
   { at: 0.865, value: new THREE.Color(0xff8840) },
-  { at: 1, value: new THREE.Color(0xffc17d) },
+  { at: 1, value: new THREE.Color(0xffd2a2) },
 ]
 
 const keyLightPositionKeys: SplineKeyframe<THREE.Vector3>[] = [
@@ -112,13 +137,13 @@ const keyLightPositionKeys: SplineKeyframe<THREE.Vector3>[] = [
 
 const ambientIntensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.035 }, { at: 0.2, value: 0.065 }, { at: 0.48, value: 0.11 },
-  { at: 0.68, value: 0.09 }, { at: 0.84, value: 0.025 }, { at: 1, value: 0.025 },
+  { at: 0.68, value: 0.09 }, { at: 0.84, value: 0.025 }, { at: 1, value: 0.032 },
 ]
 
 const fillIntensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.34 }, { at: 0.16, value: 0.48 }, { at: 0.34, value: 0.42 },
   { at: 0.5, value: 0.64 }, { at: 0.68, value: 0.56 }, { at: 0.84, value: 0.2 },
-  { at: 1, value: 0.18 },
+  { at: 1, value: 0.27 },
 ]
 
 const keyIntensityKeys: SplineKeyframe<number>[] = [
@@ -170,6 +195,11 @@ export class JourneyWorld {
   private readonly reducedCamera = new THREE.Vector3(0, 3, 7.8)
   private readonly lightTarget = new THREE.Vector3()
   private readonly backgroundColor = new THREE.Color(PALETTE.night)
+  private readonly backdropTopColor = new THREE.Color(0x080c0a)
+  private readonly backdropBottomColor = new THREE.Color(0x081008)
+  private readonly backdropGlowColor = new THREE.Color(0x9d7a32)
+  private readonly backdropMaterial: THREE.ShaderMaterial
+  private readonly backdrop: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>
   private readonly keyLightColor = new THREE.Color()
   private readonly fillLightColor = new THREE.Color(0xb9c29d)
   private readonly groundLightColor = new THREE.Color(0x101311)
@@ -195,7 +225,50 @@ export class JourneyWorld {
 
     this.scene.background = this.backgroundColor
     this.scene.fog = new THREE.FogExp2(PALETTE.night, 0.028)
-    this.scene.add(this.root)
+    this.backdropMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTop: { value: this.backdropTopColor },
+        uBottom: { value: this.backdropBottomColor },
+        uGlow: { value: this.backdropGlowColor },
+        uGlowStrength: { value: 0.08 },
+        uResolution: { value: new THREE.Vector2(1, 1) },
+      },
+      vertexShader: `
+        varying vec3 vLocal;
+        void main() {
+          vLocal = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uTop;
+        uniform vec3 uBottom;
+        uniform vec3 uGlow;
+        uniform float uGlowStrength;
+        uniform vec2 uResolution;
+        varying vec3 vLocal;
+        void main() {
+          vec2 uv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
+          float vertical = smoothstep(0.02, 0.98, uv.y);
+          vec3 color = mix(uBottom, uTop, vertical);
+          vec2 offset = (uv - vec2(0.52, 0.46)) * vec2(1.0, 1.28);
+          float radial = 1.0 - smoothstep(0.05, 0.72, length(offset));
+          float horizon = exp(-pow((uv.y - 0.42) * 5.2, 2.0));
+          color += uGlow * (radial * 0.72 + horizon * 0.28) * uGlowStrength;
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+      depthTest: false,
+      fog: false,
+      toneMapped: false,
+    })
+    this.backdrop = new THREE.Mesh(new THREE.SphereGeometry(36, 32, 18), this.backdropMaterial)
+    this.backdrop.name = 'journey-gradient-backdrop'
+    this.backdrop.renderOrder = -1000
+    this.backdrop.frustumCulled = false
+    this.scene.add(this.backdrop, this.root)
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -214,7 +287,7 @@ export class JourneyWorld {
     this.container.appendChild(this.renderer.domElement)
 
     if (quality.bloom) {
-      const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: quality.tier === 'high' ? 4 : 0 })
+      const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: quality.tier === 'high' ? 2 : 0 })
       this.composer = new EffectComposer(this.renderer, renderTarget)
       this.composer.addPass(new RenderPass(this.scene, this.camera))
       this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.06, 0.32, 0.86)
@@ -239,7 +312,7 @@ export class JourneyWorld {
     this.keyLight.shadow.blurSamples = 8
     this.ovenLight = new THREE.PointLight(PALETTE.ember, 0, 6, 2)
     this.ovenLight.position.set(-0.55, 0.46, -1.1)
-    this.breadLight = new THREE.PointLight(0xffc992, 0, 5.5, 2)
+    this.breadLight = new THREE.PointLight(0xffd0a0, 0, 5.5, 2)
     this.breadLight.position.set(2.5, 2.15, 1.45)
     this.keyLight.target.position.set(0, 0.35, 0)
     this.scene.add(this.ambientLight, this.fillLight, this.keyLight, this.keyLight.target, this.ovenLight, this.breadLight)
@@ -284,6 +357,8 @@ export class JourneyWorld {
     this.renderer.setPixelRatio(this.quality.dpr)
     this.renderer.setSize(width, height, false)
     this.composer?.setSize(width, height)
+    const pixelRatio = this.renderer.getPixelRatio()
+    ;(this.backdropMaterial.uniforms.uResolution.value as THREE.Vector2).set(width * pixelRatio, height * pixelRatio)
   }
 
   destroy() {
@@ -294,6 +369,8 @@ export class JourneyWorld {
     window.removeEventListener('resize', this.resize)
     this.renderer.dispose()
     this.composer?.dispose()
+    this.backdrop.geometry.dispose()
+    this.backdropMaterial.dispose()
     this.root.traverse((child) => {
       const mesh = child as THREE.Mesh
       if (mesh.geometry) mesh.geometry.dispose()
@@ -322,8 +399,8 @@ export class JourneyWorld {
       this.visualProgress = this.progress
       this.visualVelocity = 0
     } else {
-      const baseTime = this.quality.mobile ? 0.068 : 0.088
-      const catchupTime = this.quality.mobile ? 0.046 : 0.054
+      const baseTime = this.quality.mobile ? 0.068 : this.quality.tier === 'high' ? 0.102 : 0.095
+      const catchupTime = this.quality.mobile ? 0.046 : this.quality.tier === 'high' ? 0.058 : 0.054
       const urgency = THREE.MathUtils.smoothstep(distance, 0.015, 0.2)
       const result = criticallyDamped(
         this.visualProgress,
@@ -399,6 +476,10 @@ export class JourneyWorld {
     sampleColorKeyframes(p, backgroundKeys, this.backgroundColor)
     this.scene.background = this.backgroundColor
     if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.color.copy(this.backgroundColor)
+    sampleColorKeyframes(p, backdropTopKeys, this.backdropTopColor)
+    sampleColorKeyframes(p, backdropBottomKeys, this.backdropBottomColor)
+    sampleColorKeyframes(p, backdropGlowKeys, this.backdropGlowColor)
+    this.backdropMaterial.uniforms.uGlowStrength.value = sampleNumberSplineKeyframes(p, backdropGlowStrengthKeys)
 
     sampleColorKeyframes(p, keyLightColorKeys, this.keyLightColor)
     this.keyLight.color.copy(this.keyLightColor)
@@ -421,7 +502,7 @@ export class JourneyWorld {
     // arrives only as the dough crosses the threshold. This preserves the pale
     // proofed material long enough for the physical handoff to read.
     this.ovenLight.intensity = ovenWarmth * (0.82 + ovenHeat * 1.78)
-    this.breadLight.intensity = finishWarmth * 2.25
+    this.breadLight.intensity = finishWarmth * 1.75
     this.renderer.toneMappingExposure = sampleNumberSplineKeyframes(p, exposureKeys)
     if (this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.density = sampleNumberSplineKeyframes(p, fogDensityKeys)
