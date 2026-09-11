@@ -54,9 +54,9 @@ function groundedY(surfaceY: number, localBottomY: number) {
 }
 
 const SCORE_SPECS = [
-  { center: -0.52, width: 0.9, depth: 1.0, curve: -0.014 },
-  { center: 0, width: 1.05, depth: 1.1, curve: 0.018 },
-  { center: 0.5, width: 0.84, depth: 0.94, curve: -0.011 },
+  { center: -0.52, width: 0.88, depth: 1.0, curve: -0.014 },
+  { center: 0, width: 1.08, depth: 1.12, curve: 0.018 },
+  { center: 0.5, width: 0.82, depth: 0.9, curve: -0.011 },
 ] as const
 
 function createRandom(initial: number) {
@@ -349,7 +349,7 @@ class DoughMorph {
       groove *= cutMask * scoring
       scoreCore *= cutMask * scoring
       scoreEdge *= cutMask * scoring
-      py -= groove * (0.026 + spring * 0.058)
+      py -= groove * (0.03 + spring * 0.068)
       const irregular = Math.sin(px * 21 + pz * 13) * Math.sin(pz * 31 - px * 9)
       const blister = Math.max(0, Math.sin(px * 8.6 + pz * 4.9) * Math.cos(pz * 10.2 - px * 3.3) - 0.7)
       py += crown * baking * (irregular * 0.0055 + blister * 0.008)
@@ -372,7 +372,7 @@ class DoughMorph {
     }
     const wetness = mixing * (1 - shaping)
     this.mesh.material.roughness = Math.min(0.99, 0.96 - wetness * 0.34 + shaping * 0.13 + proof * 0.03 + baking * 0.09)
-    this.mesh.material.bumpScale = 0.006 + baking * 0.031
+    this.mesh.material.bumpScale = 0.006 + baking * 0.036
     this.mesh.material.emissiveIntensity = 0.025 + baking * 0.018
     this.position.needsUpdate = this.colors.needsUpdate = true
     this.mesh.geometry.computeVertexNormals()
@@ -1045,7 +1045,7 @@ function mill(quality: QualityConfig) {
   const localBottomY = measureLocalBottomY(group)
   const shadow = contactShadow(group, 2.85, 2.45)
   shadow.scale.set(1.08, 1, 1)
-  shadow.material.opacity = 0.82
+  shadow.material.opacity = 0.4
   return { group, rotor, outlet, shadow, localBottomY }
 }
 
@@ -1102,6 +1102,14 @@ function jug(quality: QualityConfig) {
   group.traverse((child) => {
     const candidate = child as T.Mesh
     if (candidate.isMesh) candidate.castShadow = false
+  })
+  // Stable transparent layering: water composites first, glass blends over it
+  // from every angle instead of flickering with view-dependent sort order.
+  water.renderOrder = 1
+  waterTop.renderOrder = 1
+  group.children.forEach((child) => {
+    const candidate = child as T.Mesh
+    if (candidate.isMesh && candidate.material === glass) candidate.renderOrder = 2
   })
   return group
 }
@@ -1253,7 +1261,7 @@ function breadCutDetails(quality: QualityConfig) {
   group.name = 'bread-cut-reveal'
   const crumbMaterial = mat(0xfff3d2, quality, 'crumb', { roughness: 0.97, side: T.DoubleSide, emissive: 0x4b2510, emissiveIntensity: 0.035 })
   const crustMaterial = mat(0x843515, quality, 'crust', { roughness: 0.94, bumpScale: 0.027 })
-  const poreMaterial = new T.MeshStandardMaterial({ map: crumbPoreTexture(), color: 0xffffff, roughness: 1, metalness: 0, transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false })
+  const poreMaterial = new T.MeshStandardMaterial({ map: crumbPoreTexture(), color: 0xffffff, roughness: 1, metalness: 0, transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   const faceGeometry = crumbFaceGeometry()
   const mainCrustFace = mesh(faceGeometry, crustMaterial, group, 0.806, 0.43, 0)
   mainCrustFace.rotation.y = Math.PI / 2
@@ -1541,7 +1549,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const flourish = currentQuality.reducedMotion ? 0.35 : 1
       const extract = windowProgress(p, 0.082, 0.17)
       const feed = windowProgress(p, 0.225, 0.292, (value) => value * value)
-      const feedScale = windowProgress(p, 0.215, 0.289, (value) => value * value * (3 - 2 * value))
+      const feedScale = windowProgress(p, 0.25, 0.295, (value) => value * value * (3 - 2 * value))
       const throatOcclusion = windowProgress(p, 0.285, 0.295, (value) => value * value)
       const millEnter = windowProgress(p, 0.182, 0.242)
       const fieldRetreat = windowProgress(p, 0.138, 0.285)
@@ -1561,7 +1569,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         wheatMotePositions[index * 3 + 2] = seed.z + Math.cos(ambient * 0.11 + seed.phase) * 0.05
       })
       wheatMoteGeometry.attributes.position.needsUpdate = true
-      visibility.kernel.set(1 - windowProgress(p, 0.29, 0.297))
+      visibility.kernel.set(1 - windowProgress(p, 0.29, 0.299))
       temp.set(0.055, 1.98, 0).applyEuler(heroEar.rotation).add(heroEar.position).add(field.position)
       kernelHome.copy(temp)
       kernel.position.lerpVectors(kernelHome, kernelFocus, extract)
@@ -1581,8 +1589,8 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       // The only remaining fade occurs after the tiny kernel is inside the
       // opaque feed throat, so reverse scrubbing reads as physical emergence.
       const grind = windowProgress(p, 0.284, 0.405, (value) => value * value * (2 - value))
-      millModel.rotor.rotation.y = grind * Math.PI * 9 + Math.sin(ambient * 0.35) * 0.014 * bell(grind)
-      millModel.rotor.position.y = 0.62 + Math.sin(grind * Math.PI * 18) * bell(grind) * 0.0045 * flourish
+      millModel.rotor.rotation.y = grind * Math.PI * 5.75 + Math.sin(ambient * 0.35) * 0.014 * bell(grind)
+      millModel.rotor.position.y = 0.62 + Math.sin(grind * Math.PI * 11.5) * bell(grind) * 0.0045 * flourish
       millModel.shadow.position.y = worktopSurface.topY - millGroundY + CONTACT_EPSILON * 0.5
       outlet.copy(millModel.outlet).add(millModel.group.position)
       flourReceivingPoint.set(outlet.x + 0.018, worktopSurface.topY + CONTACT_EPSILON, outlet.z + 0.055)
@@ -1591,7 +1599,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const bowlRecede = windowProgress(p, 0.626, 0.66)
       // The dough fills the foreground as the camera follows it out; finish the
       // bowl fade while it is still occluded instead of leaving a ghostly rim.
-      const bowlPresence = windowProgress(p, 0.434, 0.449, (value) => value * value * (3 - 2 * value)) * (1 - windowProgress(p, 0.621, 0.629, (value) => value ** 4))
+      const bowlPresence = windowProgress(p, 0.425, 0.452, (value) => value * value * (3 - 2 * value)) * (1 - windowProgress(p, 0.621, 0.629, (value) => value ** 4))
       // The bowl is grounded at its final preparation position before it is
       // revealed. Flour atmosphere and camera motion perform the handoff.
       bowlModel.group.position.set(-bowlRecede * 0.2, bowlGroundY, 0.18 - bowlRecede * 1.25)
@@ -1671,7 +1679,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       const basketApproach = windowProgress(p, 0.65, 0.705)
       const basketPlace = windowProgress(p, 0.688, 0.735)
       const basketRecede = windowProgress(p, 0.805, 0.848)
-      basket.position.set(0.2 * (1 - basketApproach), basketGroundY, 0.12 - (1 - basketApproach) * 2.2 - basketRecede * 0.72)
+      basket.position.set(0.2 * (1 - basketApproach), basketGroundY, 0.12 - (1 - basketApproach) * 1.05 - basketRecede * 0.72)
       const basketPresence = windowProgress(p, 0.666, 0.7) * (1 - windowProgress(p, 0.812, 0.846))
       visibility.basket.set(basketPresence)
       basketShadow.position.set(basket.position.x - 0.02, worktopSurface.topY + CONTACT_EPSILON * 0.5, basket.position.z - 0.025)
@@ -1702,7 +1710,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       peel.position.set(0, peelGroundY, peelZ)
       visibility.peel.set(windowProgress(p, 0.765, 0.8) * (1 - windowProgress(p, 0.88, 0.91)))
       if (p >= 0.808) arcPosition(doughInBasket, ovenDestination, intoOven, 0.22, dough.mesh.position)
-      const glow = windowProgress(p, 0.748, 0.83) * (1 - ovenExit)
+      const glow = windowProgress(p, 0.732, 0.83) * (1 - ovenExit)
       ovenModel.glow.material.opacity = glow * (0.3 + Math.sin(ambient * 3.1) * 0.025)
       ovenModel.embers.forEach((ember, index) => {
         const flicker = 0.86 + Math.sin(ambient * (1.7 + index * 0.07) + ember.userData.phase) * 0.13 + Math.sin(ambient * 3.3 + index) * 0.05
@@ -1732,7 +1740,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         crumb.visible = fall > 0.002
         const growth = windowProgress(fall, 0, 0.28)
         crumb.scale.set(growth * stretch, growth * (0.72 + (index % 2) * 0.25), growth)
-        crumb.position.set(x + fall * (0.06 + index * 0.006) + drift * fall, 0.62 - fall * (0.5 + (index % 3) * 0.035), z + Math.sin(index * 2.3) * fall * 0.08)
+        crumb.position.set(x + fall * (0.06 + index * 0.006) + drift * fall, 0.62 - fall * (0.55 + (index % 3) * 0.03), z + Math.sin(index * 2.3) * fall * 0.08)
         crumb.rotation.set(fall * index, fall * 2.1, fall * 0.7)
       })
       const airborne = Math.max(bell(liftOut), bell(basketPlace), bell(intoOven), bell(finish))

@@ -22,46 +22,36 @@ type ColorKeyframe = Keyframe<THREE.Color>
 
 const cameraPositionKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-0.82, 1.1, 5.25) },
-  { at: 0.095, value: new THREE.Vector3(-0.38, 1.3, 4.52) },
   { at: 0.205, value: new THREE.Vector3(0.56, 1.72, 4.1), tension: 0.42 },
-  { at: 0.31, value: new THREE.Vector3(-0.34, 1.46, 4.72) },
-  { at: 0.36, value: new THREE.Vector3(-0.18, 1.32, 4.3), tension: 0.34 },
-  { at: 0.425, value: new THREE.Vector3(0.14, 1.5, 4.12), tension: 0.28 },
+  { at: 0.31, value: new THREE.Vector3(-0.1, 1.46, 4.42) },
+  { at: 0.41, value: new THREE.Vector3(0.08, 1.44, 4.16), tension: 0.3 },
   { at: 0.5, value: new THREE.Vector3(0.55, 2.42, 4.88) },
   { at: 0.62, value: new THREE.Vector3(0.04, 1.86, 4.36) },
   { at: 0.74, value: new THREE.Vector3(0.18, 2, 4.42), tension: 0.84 },
   { at: 0.855, value: new THREE.Vector3(-0.46, 1.5, 4.05) },
-  { at: 0.925, value: new THREE.Vector3(0.12, 1.7, 4.38) },
-  { at: 0.965, value: new THREE.Vector3(1.02, 1.84, 4.9), tension: 0.18 },
-  { at: 1, value: new THREE.Vector3(2.55, 1.62, 4.58) },
+  { at: 0.945, value: new THREE.Vector3(0.3, 1.74, 4.62) },
+  { at: 1, value: new THREE.Vector3(0.75, 1.66, 4.35) },
 ]
 
 const cameraLookKeys: SplineKeyframe<THREE.Vector3>[] = [
   { at: 0, value: new THREE.Vector3(-0.2, 1.48, -0.02) },
-  { at: 0.13, value: new THREE.Vector3(-0.08, 1.69, 0.3) },
-  { at: 0.205, value: new THREE.Vector3(0, 1.54, 0.55), tension: 0.56 },
+  { at: 0.205, value: new THREE.Vector3(0, 1.54, 0.55), tension: 0.5 },
   { at: 0.31, value: new THREE.Vector3(0, 0.78, -0.35) },
-  { at: 0.36, value: new THREE.Vector3(0.14, 0.31, 0.92), tension: 0.36 },
-  { at: 0.425, value: new THREE.Vector3(0.18, 0.27, 1.2), tension: 0.3 },
-  { at: 0.5, value: new THREE.Vector3(0, 0.38, 0.18) },
-  { at: 0.62, value: new THREE.Vector3(0, 0.4, 0.14) },
+  { at: 0.41, value: new THREE.Vector3(0.16, 0.29, 1.05), tension: 0.3 },
+  { at: 0.56, value: new THREE.Vector3(0, 0.39, 0.16) },
   { at: 0.74, value: new THREE.Vector3(0, 0.32, 0.14), tension: 0.85 },
   { at: 0.855, value: new THREE.Vector3(0, 0.68, -1.4) },
-  { at: 0.925, value: new THREE.Vector3(0, 0.56, -1.1) },
+  { at: 0.93, value: new THREE.Vector3(0.01, 0.5, -0.35) },
   { at: 1, value: new THREE.Vector3(0.02, 0.42, 0.47) },
 ]
 
 const cameraFovKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 32 },
-  { at: 0.19, value: 27, tension: 0.48 },
-  { at: 0.31, value: 34 },
-  { at: 0.36, value: 31 },
-  { at: 0.425, value: 29, tension: 0.35 },
-  { at: 0.5, value: 36 },
-  { at: 0.62, value: 31 },
-  { at: 0.74, value: 33, tension: 0.72 },
-  { at: 0.855, value: 36 },
-  { at: 0.93, value: 34 },
+  { at: 0.205, value: 27, tension: 0.48 },
+  { at: 0.33, value: 32.5 },
+  { at: 0.55, value: 34 },
+  { at: 0.74, value: 31.5, tension: 0.7 },
+  { at: 0.86, value: 35.5 },
   { at: 1, value: 31 },
 ]
 
@@ -72,7 +62,7 @@ const backgroundKeys: ColorKeyframe[] = [
   { at: 0.25, value: new THREE.Color(0x35402b) },
   { at: 0.34, value: new THREE.Color(0x47473b) },
   { at: 0.43, value: new THREE.Color(0x5f5949) },
-  { at: 0.5, value: new THREE.Color(0x776b57) },
+  { at: 0.5, value: new THREE.Color(0x6e6352) },
   { at: 0.66, value: new THREE.Color(0x6c5e48) },
   { at: 0.75, value: new THREE.Color(0x554533) },
   { at: 0.82, value: new THREE.Color(0x21150f) },
@@ -84,7 +74,7 @@ const backdropTopKeys: ColorKeyframe[] = [
   { at: 0, value: new THREE.Color(0x080c0a) },
   { at: 0.17, value: new THREE.Color(0x172418) },
   { at: 0.32, value: new THREE.Color(0x3a392f) },
-  { at: 0.48, value: new THREE.Color(0x877f70) },
+  { at: 0.48, value: new THREE.Color(0x7a7264) },
   { at: 0.66, value: new THREE.Color(0x685b49) },
   { at: 0.75, value: new THREE.Color(0x746047) },
   { at: 0.83, value: new THREE.Color(0x130b08) },
@@ -153,17 +143,17 @@ const fillIntensityKeys: SplineKeyframe<number>[] = [
 const keyIntensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 2.0 }, { at: 0.16, value: 2.7 }, { at: 0.3, value: 3.0 },
   { at: 0.5, value: 2.55 }, { at: 0.68, value: 2.7 }, { at: 0.76, value: 2.25 },
-  { at: 0.84, value: 1.85 }, { at: 1, value: 3.15 },
+  { at: 0.84, value: 1.85 }, { at: 1, value: 2.95 },
 ]
 
 const exposureKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.84 }, { at: 0.18, value: 0.92 }, { at: 0.5, value: 0.9 },
-  { at: 0.74, value: 0.86 }, { at: 0.84, value: 0.78 }, { at: 1, value: 0.94 },
+  { at: 0.74, value: 0.86 }, { at: 0.84, value: 0.78 }, { at: 1, value: 0.92 },
 ]
 
 const fogDensityKeys: SplineKeyframe<number>[] = [
   { at: 0, value: 0.052 }, { at: 0.14, value: 0.042 }, { at: 0.28, value: 0.027 },
-  { at: 0.37, value: 0.038 }, { at: 0.48, value: 0.021 }, { at: 0.74, value: 0.024 },
+  { at: 0.37, value: 0.03 }, { at: 0.48, value: 0.021 }, { at: 0.74, value: 0.024 },
   { at: 0.85, value: 0.04 }, { at: 1, value: 0.03 },
 ]
 
@@ -196,6 +186,7 @@ export class JourneyWorld {
   private readonly lookTarget = new THREE.Vector3()
   private readonly desiredLook = new THREE.Vector3()
   private readonly cameraTarget = new THREE.Vector3()
+  private readonly orbitOffset = new THREE.Vector3()
   private readonly reducedCamera = new THREE.Vector3(0, 3, 7.8)
   private readonly lightTarget = new THREE.Vector3()
   private readonly backgroundColor = new THREE.Color(PALETTE.night)
@@ -403,7 +394,7 @@ export class JourneyWorld {
       this.visualProgress = this.progress
       this.visualVelocity = 0
     } else {
-      const baseTime = this.quality.mobile ? 0.068 : this.quality.tier === 'high' ? 0.102 : 0.095
+      const baseTime = this.quality.mobile ? 0.068 : this.quality.tier === 'high' ? 0.09 : 0.088
       const catchupTime = this.quality.mobile ? 0.046 : this.quality.tier === 'high' ? 0.058 : 0.054
       const urgency = THREE.MathUtils.smoothstep(distance, 0.015, 0.2)
       const result = criticallyDamped(
@@ -450,6 +441,23 @@ export class JourneyWorld {
     const pointerAmount = context.quality.reducedMotion ? 0 : 1
     sampleVectorSplineKeyframes(context.progress, cameraPositionKeys, this.cameraTarget)
     sampleVectorSplineKeyframes(context.progress, cameraLookKeys, this.desiredLook)
+    // Restrained reversible finale orbit. The spline carries the dolly while a
+    // small progress-driven yaw (smootherstep: zero velocity at both ends)
+    // rotates the camera around the loaf anchor. Pure function of progress, so
+    // reverse scrubbing unwinds it exactly. Skipped in reduced-motion mode.
+    const orbitBlend = context.quality.reducedMotion ? 0 : windowProgress(context.progress, 0.955, 1)
+    if (orbitBlend > 0) {
+      const orbitAngle = orbitBlend * (Math.PI / 18)
+      this.orbitOffset.copy(this.cameraTarget).sub(this.desiredLook)
+      const cosA = Math.cos(orbitAngle)
+      const sinA = Math.sin(orbitAngle)
+      const ox = this.orbitOffset.x
+      const oz = this.orbitOffset.z
+      this.orbitOffset.x = ox * cosA + oz * sinA
+      this.orbitOffset.z = -ox * sinA + oz * cosA
+      this.orbitOffset.multiplyScalar(1 - orbitBlend * 0.05)
+      this.cameraTarget.copy(this.desiredLook).add(this.orbitOffset)
+    }
     if (context.quality.reducedMotion) {
       // Keep most chapters calm and wide in reduced-motion mode, but preserve
       // the authored three-quarter product angle once the final cut settles.
@@ -496,7 +504,7 @@ export class JourneyWorld {
     this.keyLight.position.copy(this.lightTarget)
     this.keyLight.target.position.set(0, 0.32 + windowProgress(p, 0.72, 0.86) * 0.35, -windowProgress(p, 0.72, 0.86) * 1.2 + windowProgress(p, 0.9, 1) * 1.65)
 
-    const ovenWarmth = windowProgress(p, 0.753, 0.829) * (1 - windowProgress(p, 0.925, 0.98))
+    const ovenWarmth = windowProgress(p, 0.735, 0.829) * (1 - windowProgress(p, 0.925, 0.98))
     const ovenHeat = windowProgress(p, 0.813, 0.86)
     const finishWarmth = windowProgress(p, 0.89, 1)
     this.ambientLight.intensity = sampleNumberSplineKeyframes(p, ambientIntensityKeys)

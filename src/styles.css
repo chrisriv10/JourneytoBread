@@ -364,16 +364,6 @@ button {
   animation-duration: 2.2s;
 }
 
-.loader__ring span {
-  position: absolute;
-  inset: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #d6a84d;
-  box-shadow: 0 0 28px 4px rgba(214, 168, 77, 0.25);
-}
-
 .fallback {
   min-height: 100vh;
   display: grid;
