@@ -15,7 +15,7 @@ import {
 } from './motion'
 import { createJourneySequence, type JourneySequence, type SequenceContext } from './models'
 import type { JourneyState, PointerState, QualityConfig } from './types'
-import { STAGES } from './types'
+import { PLAYBACK_DURATION_SECONDS, STAGES } from './types'
 import { PALETTE } from './geometry'
 
 type ColorKeyframe = Keyframe<THREE.Color>
@@ -329,7 +329,7 @@ export class JourneyWorld {
       progress: this.progress,
       stageIndex: STAGES.indexOf(stage) + 1,
       stageLabel: stage.label,
-      remainingSeconds: Math.round(120 * (1 - this.progress)),
+      remainingSeconds: Math.round(PLAYBACK_DURATION_SECONDS * (1 - this.progress)),
     }
   }
 

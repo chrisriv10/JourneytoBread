@@ -1,7 +1,6 @@
 import Lenis from 'lenis'
+import { PLAYBACK_DURATION_SECONDS } from './types'
 import { JourneyWorld } from './world'
-
-export const PLAYBACK_DURATION_SECONDS = 120
 
 export class JourneyController {
   private readonly world: JourneyWorld
@@ -110,7 +109,7 @@ export class JourneyController {
   private readonly raf = (time: number) => {
     if (this.playbackPlaying) {
       try {
-        // Elapsed real time keeps playback at ~120 seconds regardless of
+        // Elapsed real time keeps playback at the authored duration regardless of
         // frame rate, refresh rate, or dropped frames.
         const elapsed = (time - this.playbackStartTime) / 1000
         let next = this.playbackStartProgress + elapsed / PLAYBACK_DURATION_SECONDS

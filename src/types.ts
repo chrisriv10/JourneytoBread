@@ -44,6 +44,8 @@ export type StageDefinition = {
   end: number
 }
 
+export const PLAYBACK_DURATION_SECONDS = 30
+
 export const STAGES: StageDefinition[] = [
   { id: 'wheat', label: 'WHEAT', start: 0, end: 0.16 },
   { id: 'grain', label: 'GRAIN', start: 0.12, end: 0.25 },
