@@ -93,6 +93,7 @@ button {
 .hud__stage,
 .hud__timer,
 .sound-toggle,
+.play-toggle,
 .hud__scroll-hint,
 .replay {
   font-family: 'DM Mono', ui-monospace, monospace;
@@ -256,20 +257,47 @@ button {
 .replay:hover span,
 .replay:focus-visible span { transform: rotate(-40deg); }
 
-.sound-toggle {
+.hud__controls {
   grid-column: 3;
   grid-row: 3;
-  display: inline-flex;
   justify-self: end;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.sound-toggle {
+  display: inline-flex;
   align-items: center;
   gap: 10px;
   color: rgba(245, 237, 220, 0.54);
   transition: color 200ms ease;
 }
 
+.play-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: flex-end;
+  color: rgba(245, 237, 220, 0.54);
+  transition: color 200ms ease;
+}
+
+.play-toggle__icon {
+  font-size: 9px;
+  line-height: 1;
+}
+
 .sound-toggle:hover,
 .sound-toggle:focus-visible,
-.sound-toggle.is-on { color: rgba(245, 237, 220, 0.92); }
+.sound-toggle.is-on,
+.play-toggle:hover,
+.play-toggle:focus-visible,
+.play-toggle.is-on { color: rgba(245, 237, 220, 0.92); }
 
 .hud-on-light .hud,
 .hud-on-light .hud__timer,
@@ -281,6 +309,7 @@ button {
 .hud-on-light .hud__stage-number,
 .hud-on-light .scene-copy,
 .hud-on-light .sound-toggle,
+.hud-on-light .play-toggle,
 .hud-on-light .hud__scroll-hint {
   color: rgba(39, 32, 23, 0.52);
 }
@@ -416,6 +445,7 @@ button:focus-visible {
   .hud__finish-title { font-size: clamp(3.4rem, 18vw, 6rem); }
   .hud__finish-meta { font-size: 9px; letter-spacing: .1em; }
   .sound-toggle { font-size: 10px; }
+  .play-toggle { font-size: 10px; min-width: 44px; min-height: 44px; }
   .loader__ring { width: min(58vw, 250px); }
 }
 

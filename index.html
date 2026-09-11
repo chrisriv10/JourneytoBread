@@ -41,10 +41,17 @@
           <button id="replay" class="replay" type="button">Replay journey <span>↻</span></button>
         </div>
 
-        <button id="sound-toggle" class="sound-toggle" type="button" aria-pressed="false" aria-label="Turn sound on">
-          <span class="sound-toggle__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-          <span id="sound-label">Sound off</span>
-        </button>
+        <div class="hud__controls">
+          <button id="play-toggle" class="play-toggle" type="button" aria-label="Play journey" aria-pressed="false">
+            <span id="play-icon" class="play-toggle__icon" aria-hidden="true">▶</span>
+            <span id="play-label">Play</span>
+          </button>
+
+          <button id="sound-toggle" class="sound-toggle" type="button" aria-pressed="false" aria-label="Turn sound on">
+            <span class="sound-toggle__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span id="sound-label">Sound off</span>
+          </button>
+        </div>
       </main>
 
       <div id="fallback" class="fallback" hidden>

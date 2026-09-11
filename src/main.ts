@@ -31,9 +31,12 @@ const sceneCopy = document.querySelector<HTMLElement>('#scene-copy')!
 const finishCopy = document.querySelector<HTMLElement>('#finish-copy')!
 const soundToggle = document.querySelector<HTMLButtonElement>('#sound-toggle')!
 const soundLabel = document.querySelector<HTMLElement>('#sound-label')!
+const playToggle = document.querySelector<HTMLButtonElement>('#play-toggle')!
+const playLabel = document.querySelector<HTMLElement>('#play-label')!
+const playIcon = document.querySelector<HTMLElement>('#play-icon')!
 const replayButton = document.querySelector<HTMLButtonElement>('#replay')!
 
-if (!experience || !rail || !loader || !fallback || !stageNumber || !stageLabel || !timer || !introCopy || !sceneCopy || !finishCopy || !soundToggle || !soundLabel || !replayButton) {
+if (!experience || !rail || !loader || !fallback || !stageNumber || !stageLabel || !timer || !introCopy || !sceneCopy || !finishCopy || !soundToggle || !soundLabel || !playToggle || !playLabel || !playIcon || !replayButton) {
   throw new Error('Journey to Bread could not find its interface shell.')
 }
 
@@ -74,6 +77,23 @@ function updateHud(state: JourneyState) {
   document.documentElement.classList.toggle('hud-on-light', state.progress >= 0.335 && state.progress <= 0.79)
   document.documentElement.style.setProperty('--journey-progress', String(state.progress))
   audio.setProgress(state.progress)
+  updatePlayControl(controller?.isPlaying ?? false, state.progress)
+}
+
+function updatePlayControl(playing: boolean, progress: number) {
+  const finished = progress >= 1
+  const label = playing ? 'Pause' : finished ? 'Replay' : 'Play'
+  const icon = playing ? '❚❚' : finished ? '↻' : '▶'
+  const ariaLabel = playing ? 'Pause journey' : finished ? 'Replay journey' : 'Play journey'
+  if (playLabel.textContent !== label) playLabel.textContent = label
+  if (playIcon.textContent !== icon) playIcon.textContent = icon
+  if (playToggle.getAttribute('aria-label') !== ariaLabel) playToggle.setAttribute('aria-label', ariaLabel)
+  playToggle.setAttribute('aria-pressed', String(playing))
+  playToggle.classList.toggle('is-on', playing)
+}
+
+function refreshPlayControl() {
+  updatePlayControl(controller?.isPlaying ?? false, controller?.progress ?? 0)
 }
 
 function setupWebMcp(activeController: JourneyController) {
@@ -107,7 +127,7 @@ function setupWebMcp(activeController: JourneyController) {
 try {
   const quality = getQualityConfig()
   world = new JourneyWorld(experience, quality, updateHud)
-  controller = new JourneyController(world)
+  controller = new JourneyController(world, refreshPlayControl)
   if (import.meta.env.DEV) {
     ;(window as Window & { __journeyDebug?: () => ReturnType<JourneyWorld['getMotionState']> }).__journeyDebug = () => world!.getMotionState()
   }
@@ -119,6 +139,17 @@ try {
     soundToggle.setAttribute('aria-label', enabled ? 'Turn sound off' : 'Turn sound on')
     soundLabel.textContent = enabled ? 'Sound on' : 'Sound off'
     soundToggle.classList.toggle('is-on', enabled)
+  })
+
+  playToggle.addEventListener('click', () => {
+    if (!controller) return
+    try {
+      if (controller.isPlaying) controller.pausePlayback()
+      else controller.play()
+    } catch {
+      controller.pausePlayback()
+    }
+    refreshPlayControl()
   })
 
   replayButton.addEventListener('click', () => controller?.replay())
