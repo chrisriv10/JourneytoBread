@@ -21,7 +21,11 @@ export class JourneyController {
       autoRaf: false,
       smoothWheel: true,
       syncTouch: true,
-      lerp: 0.1,
+      // Keep the scroll target responsive. The world applies its own
+      // frame-rate-independent critically damped pass, so a very low Lenis
+      // lerp here would stack two long filters and make micro-scrubbing feel
+      // like it is skipping between frames.
+      lerp: 0.15,
       wheelMultiplier: 0.9,
       touchMultiplier: 1,
       respectReducedMotion: true,
@@ -123,6 +127,7 @@ export class JourneyController {
       }
     }
     this.lenis.raf(time)
+    this.world.renderFrame(time)
     this.animationFrame = requestAnimationFrame(this.raf)
   }
 

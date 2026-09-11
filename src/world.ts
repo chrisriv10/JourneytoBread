@@ -207,7 +207,6 @@ export class JourneyWorld {
   private visualProgress = 0
   private visualVelocity = 0
   private elapsed = 0
-  private animationFrame = 0
   private composer: EffectComposer | null = null
   private bloom: UnrealBloomPass | null = null
   private resizeObserver: ResizeObserver | null = null
@@ -322,7 +321,6 @@ export class JourneyWorld {
     this.camera.position.copy(cameraPositionKeys[0].value)
     this.lookTarget.copy(cameraLookKeys[0].value)
     this.setProgress(0)
-    this.animationFrame = requestAnimationFrame(this.render)
   }
 
   getState(): JourneyState {
@@ -360,7 +358,6 @@ export class JourneyWorld {
 
   destroy() {
     this.disposed = true
-    cancelAnimationFrame(this.animationFrame)
     this.resizeObserver?.disconnect()
     window.removeEventListener('pointermove', this.handlePointer)
     window.removeEventListener('resize', this.resize)
@@ -382,7 +379,10 @@ export class JourneyWorld {
     this.pointer.targetY = (event.clientY / Math.max(window.innerHeight, 1) - 0.5) * 2
   }
 
-  private readonly render = (timestamp: number) => {
+  // The controller calls this immediately after Lenis has sampled the current
+  // scroll frame. Keeping both operations in one rAF prevents a one-frame
+  // race between scroll input and the Three.js scene.
+  renderFrame(timestamp: number) {
     if (this.disposed) return
     const delta = this.previousTime ? Math.min((timestamp - this.previousTime) / 1000, 0.05) : 1 / 60
     this.previousTime = timestamp
@@ -396,8 +396,11 @@ export class JourneyWorld {
       this.visualProgress = this.progress
       this.visualVelocity = 0
     } else {
-      const baseTime = this.quality.mobile ? 0.068 : this.quality.tier === 'high' ? 0.09 : 0.088
-      const catchupTime = this.quality.mobile ? 0.046 : this.quality.tier === 'high' ? 0.058 : 0.054
+      // Lenis already smooths the physical scroll input. Keep this second
+      // pass quick enough to preserve tiny intentional scrubs while retaining
+      // critically damped continuity when the user reverses direction.
+      const baseTime = this.quality.mobile ? 0.046 : this.quality.tier === 'high' ? 0.058 : 0.054
+      const catchupTime = this.quality.mobile ? 0.032 : this.quality.tier === 'high' ? 0.039 : 0.037
       const urgency = THREE.MathUtils.smoothstep(distance, 0.015, 0.2)
       const result = criticallyDamped(
         this.visualProgress,
@@ -427,7 +430,6 @@ export class JourneyWorld {
 
     if (this.composer) this.composer.render()
     else this.renderer.render(this.scene, this.camera)
-    this.animationFrame = requestAnimationFrame(this.render)
   }
 
   private setupEvents() {
