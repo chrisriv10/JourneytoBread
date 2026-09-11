@@ -58,6 +58,8 @@ export class AudioManager {
   private burstBuffer: AudioBuffer | null = null
   private suspendTimer = 0
   private activeVoices = 0
+  private windEnvelope: (p: number) => number = () => 0
+  private windLfoDepth: GainNode | null = null
   private progress = 0
   private lastProgress = 0
   private lastProgressTime = 0
@@ -144,6 +146,7 @@ export class AudioManager {
     for (const layer of this.layers) {
       layer.gain.gain.setTargetAtTime(layer.envelope(progress) * layer.level, now, layer.tau)
     }
+    this.windLfoDepth?.gain.setTargetAtTime(this.windEnvelope(progress) * 0.05, now, 0.25)
   }
 
   private fireTransients(progress: number, velocity: number, now: number) {
@@ -195,8 +198,12 @@ export class AudioManager {
 
     // Continuous layers. Levels are relative (master carries overall loudness);
     // envelopes below keep at most 2-4 layers clearly perceptible at once.
+    // Field wind falls fully away once the mill takes over: no wheat character
+    // survives into mixing, proofing, the oven, or the finale.
+    this.windEnvelope = (p) => 1 - smoothstep(p, 0.1, 0.34)
+    const windEnvelope = this.windEnvelope
     this.addLayer('ambience', this.brownBuffer, { type: 'lowpass', frequency: 420 }, 0.3, 0.25,
-      (p) => 1 - smoothstep(p, 0.1, 0.34) * 0.88)
+      (p) => windEnvelope(p))
     this.addLayer('ambience', this.whiteBuffer, { type: 'bandpass', frequency: 2400, q: 0.8 }, 0.1, 0.2,
       (p) => smoothstep(p, 0, 0.03) * (1 - smoothstep(p, 0.14, 0.24)))
     // Buried sub oscillator gives the mill weight without an electronic edge.
@@ -266,17 +273,20 @@ export class AudioManager {
     this.layers.push({ gain, level, tau, envelope })
   }
 
-  // Slow audio-rate movement for wind and water texture. Persistent nodes, no
-  // per-frame work, and purely textural so reversibility is unaffected.
+  // Slow audio-rate movement for wind texture. Persistent nodes, no per-frame
+  // work, and purely textural so reversibility is unaffected. The LFO depth
+  // tracks the wind envelope (always one-sixth of the base gain), so the
+  // modulation can never exceed the faded layer or push it through zero.
   private addSlowWobble() {
     const context = this.context
     if (!context || this.layers.length < 8) return
     const windLfo = context.createOscillator()
     windLfo.frequency.value = 0.07
     const windDepth = context.createGain()
-    windDepth.gain.value = 0.04
+    windDepth.gain.value = 0
     windLfo.connect(windDepth).connect(this.layers[0].gain.gain)
     windLfo.start()
+    this.windLfoDepth = windDepth
   }
 
   // --- transients (sparse, forward-only, guarded) ---
