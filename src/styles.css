@@ -227,7 +227,8 @@ button {
 }
 
 .replay,
-.sound-toggle {
+.sound-toggle,
+.play-toggle {
   border: 0;
   padding: 0;
   background: none;
@@ -235,6 +236,7 @@ button {
   text-transform: uppercase;
   cursor: pointer;
   pointer-events: auto;
+  appearance: none;
 }
 
 .replay {
@@ -272,6 +274,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  min-height: 36px;
   color: rgba(245, 237, 220, 0.54);
   transition: color 200ms ease;
 }
@@ -281,7 +284,7 @@ button {
   align-items: center;
   gap: 10px;
   min-width: 44px;
-  min-height: 44px;
+  min-height: 36px;
   justify-content: flex-end;
   color: rgba(245, 237, 220, 0.54);
   transition: color 200ms ease;
@@ -444,7 +447,7 @@ button:focus-visible {
   .hud__finish { bottom: 10vh; width: 100%; }
   .hud__finish-title { font-size: clamp(3.4rem, 18vw, 6rem); }
   .hud__finish-meta { font-size: 9px; letter-spacing: .1em; }
-  .sound-toggle { font-size: 10px; }
+  .sound-toggle { font-size: 10px; min-height: 44px; }
   .play-toggle { font-size: 10px; min-width: 44px; min-height: 44px; }
   .loader__ring { width: min(58vw, 250px); }
 }
