@@ -214,7 +214,9 @@ function drawCrust(size: number, albedo: CanvasRenderingContext2D, height: Canva
     const y = random() * size
     const radius = size * (0.025 + random() * 0.11)
     const toasted = random() > 0.45
-    softPatch(albedo, x, y, radius, radius * (0.55 + random()), toasted ? `rgba(84,28,8,${0.05 + random() * 0.12})` : `rgba(255,210,112,${0.04 + random() * 0.11})`)
+    // Keep the baked range golden and brown—not red. Broad, low-contrast
+    // modulation lets the model's lighting provide the dramatic darks.
+    softPatch(albedo, x, y, radius, radius * (0.55 + random()), toasted ? `rgba(94,54,23,${0.04 + random() * 0.09})` : `rgba(255,222,151,${0.035 + random() * 0.09})`)
     softPatch(roughness, x, y, radius * 1.1, radius, toasted ? 'rgba(255,255,255,0.16)' : 'rgba(155,155,155,0.1)')
   }
   for (let blister = 0; blister < 140; blister += 1) {
@@ -222,7 +224,7 @@ function drawCrust(size: number, albedo: CanvasRenderingContext2D, height: Canva
     const y = random() * size
     const rx = 0.7 + random() * 2.9
     const ry = rx * (0.45 + random() * 0.75)
-    albedo.fillStyle = random() > 0.55 ? `rgba(255,221,142,${0.025 + random() * 0.07})` : `rgba(78,28,8,${0.025 + random() * 0.065})`
+    albedo.fillStyle = random() > 0.55 ? `rgba(255,229,165,${0.02 + random() * 0.06})` : `rgba(91,51,20,${0.018 + random() * 0.05})`
     albedo.beginPath()
     albedo.ellipse(x, y, rx, ry, random() * Math.PI, 0, Math.PI * 2)
     albedo.fill()
@@ -239,18 +241,20 @@ function drawCrumb(size: number, albedo: CanvasRenderingContext2D, height: Canva
     const x = random() * size
     const y = random() * size
     const radius = size * (0.04 + random() * 0.12)
-    softPatch(albedo, x, y, radius, radius * (0.7 + random() * 0.7), random() > 0.5 ? 'rgba(255,246,207,0.07)' : 'rgba(141,77,31,0.035)')
+    softPatch(albedo, x, y, radius, radius * (0.7 + random() * 0.7), random() > 0.5 ? 'rgba(255,252,228,0.075)' : 'rgba(190,136,73,0.018)')
   }
-  for (let cavity = 0; cavity < 92; cavity += 1) {
+  // The base crumb gets only low-contrast, shallow alveoli. Large visible
+  // cavities are separately placed on the cut face with irregular outlines.
+  for (let cavity = 0; cavity < 72; cavity += 1) {
     const x = random() * size
     const y = random() * size
     const rx = 0.8 + Math.pow(random(), 1.7) * 4.2
     const ry = rx * (0.45 + random() * 0.75)
-    albedo.fillStyle = `rgba(104,55,25,${0.025 + random() * 0.09})`
+    albedo.fillStyle = `rgba(156,103,55,${0.012 + random() * 0.038})`
     albedo.beginPath()
     albedo.ellipse(x, y, rx, ry, random() * Math.PI, 0, Math.PI * 2)
     albedo.fill()
-    height.fillStyle = `rgba(68,68,68,${0.28 + random() * 0.34})`
+    height.fillStyle = `rgba(111,111,111,${0.11 + random() * 0.16})`
     height.beginPath()
     height.ellipse(x, y, rx * 0.78, ry * 0.78, random() * Math.PI, 0, Math.PI * 2)
     height.fill()
@@ -260,7 +264,10 @@ function drawCrumb(size: number, albedo: CanvasRenderingContext2D, height: Canva
 }
 
 function createSurface(kind: SurfaceKind, quality: QualityConfig) {
-  const size = quality.mobile ? 256 : 512
+  // The final loaf uses these two surfaces at product-shot distance. Raising
+  // only their source canvases retains the earlier quality tiers elsewhere.
+  const heroSurface = kind === 'crust' || kind === 'crumb'
+  const size = quality.mobile ? (heroSurface ? 384 : 256) : heroSurface ? 768 : 512
   const key = `${kind}:${size}:${quality.anisotropy}`
   const cached = cache.get(key)
   if (cached) return cached
@@ -271,8 +278,8 @@ function createSurface(kind: SurfaceKind, quality: QualityConfig) {
     flour: ['#fffaf0', '#808080', '#f2f2f2'],
     grain: ['#f0ce82', '#808080', '#e4e4e4'],
     dough: ['#fff0d2', '#808080', '#d7d7d7'],
-    crust: ['#e7bd7d', '#808080', '#dedede'],
-    crumb: ['#f8dda8', '#808080', '#eeeeee'],
+    crust: ['#d79a53', '#808080', '#dedede'],
+    crumb: ['#f7dfaf', '#808080', '#eeeeee'],
   }[kind]
   const albedo = makeCanvas(size, bases[0])
   const height = makeCanvas(size, bases[1])

@@ -307,8 +307,10 @@ export class JourneyWorld {
     this.keyLight.shadow.blurSamples = 8
     this.ovenLight = new THREE.PointLight(PALETTE.ember, 0, 6, 2)
     this.ovenLight.position.set(-0.55, 0.46, -1.1)
-    this.breadLight = new THREE.PointLight(0xffd0a0, 0, 5.5, 2)
-    this.breadLight.position.set(2.5, 2.15, 1.45)
+    // A restrained finale-only fill preserves the pale crumb without lifting
+    // the board or the surrounding dark product-shot environment.
+    this.breadLight = new THREE.PointLight(0xffe0b8, 0, 4.2, 2)
+    this.breadLight.position.set(2.05, 1.36, 1.12)
     this.keyLight.target.position.set(0, 0.35, 0)
     this.scene.add(this.ambientLight, this.fillLight, this.keyLight, this.keyLight.target, this.ovenLight, this.breadLight)
 
@@ -514,7 +516,7 @@ export class JourneyWorld {
     // arrives only as the dough crosses the threshold. This preserves the pale
     // proofed material long enough for the physical handoff to read.
     this.ovenLight.intensity = ovenWarmth * (0.82 + ovenHeat * 1.78)
-    this.breadLight.intensity = finishWarmth * 1.75
+    this.breadLight.intensity = finishWarmth * 2.05
     this.renderer.toneMappingExposure = sampleNumberSplineKeyframes(p, exposureKeys)
     if (this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.density = sampleNumberSplineKeyframes(p, fogDensityKeys)

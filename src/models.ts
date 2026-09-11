@@ -251,14 +251,16 @@ class DoughMorph {
   private readonly pale = new T.Color(PALETTE.flour)
   private readonly wet = new T.Color(0xd8ae72)
   private readonly proofed = new T.Color(0xe5bb78)
-  private readonly crust = new T.Color(0xc67d34)
-  private readonly toasted = new T.Color(0x5d240f)
-  private readonly cut = new T.Color(0xf0c887)
-  private readonly raised = new T.Color(0xf5c16d)
+  private readonly crust = new T.Color(0xd19143)
+  private readonly toasted = new T.Color(0x6b3b18)
+  private readonly cut = new T.Color(0xf0cb8d)
+  private readonly raised = new T.Color(0xf5d39b)
 
   constructor(parent: T.Object3D, quality: QualityConfig) {
-    const widthSegments = quality.mobile ? 72 : quality.tier === 'high' ? 128 : 96
-    const heightSegments = quality.mobile ? 36 : quality.tier === 'high' ? 64 : 48
+    // This is the one persistent hero mesh. A denser crown and end-cap keep
+    // the final product-shot silhouette clean without adding any new meshes.
+    const widthSegments = quality.mobile ? 84 : quality.tier === 'high' ? 168 : 132
+    const heightSegments = quality.mobile ? 42 : quality.tier === 'high' ? 82 : 64
     const geometry = new T.SphereGeometry(1, widthSegments, heightSegments)
     this.position = geometry.attributes.position as T.BufferAttribute
     this.original = new Float32Array(this.position.array)
@@ -348,17 +350,17 @@ class DoughMorph {
       let scoreEdge = 0
       let scoreLip = 0
       for (const score of SCORE_SPECS) {
-        const scoreWidth = (0.014 + spring * 0.031) * score.width
+        const scoreWidth = (0.016 + spring * 0.034) * score.width
         const scoreCutLine = px + pz * score.angle
         const curvedCenter = score.center + Math.sin(pz * 2.7 + score.center * 3.2) * score.curve
         const distance = Math.abs(scoreCutLine - curvedCenter)
         const lengthMask = windowProgress(y, 0.28, 0.66) * (1 - windowProgress(Math.abs(z), 0.57 * score.length, 0.88 * score.length))
         groove = Math.max(groove, Math.exp(-Math.pow(distance / scoreWidth, 2)) * lengthMask)
         scoreCore = Math.max(scoreCore, Math.exp(-Math.pow(distance / (scoreWidth * 0.34), 2)) * score.depth * lengthMask)
-        const rim = Math.exp(-Math.pow((distance - scoreWidth * 1.05) / (scoreWidth * 0.48), 2)) * 0.45
+        const rim = Math.exp(-Math.pow((distance - scoreWidth * 1.02) / (scoreWidth * 0.58), 2)) * 0.43
         // Baked ear: raised lip on one side of the cut only, strongest centrally.
         const lipDistance = (scoreCutLine - curvedCenter) - scoreWidth * 0.95
-        const lip = Math.exp(-Math.pow(lipDistance / (scoreWidth * 0.5), 2)) * score.lip
+        const lip = Math.exp(-Math.pow(lipDistance / (scoreWidth * 0.6), 2)) * score.lip
         scoreEdge = Math.max(scoreEdge, Math.max(rim, lip) * lengthMask)
         scoreLip = Math.max(scoreLip, lip * lengthMask)
       }
@@ -386,9 +388,9 @@ class DoughMorph {
       this.color.lerp(this.crust, baking * bakeVariation)
       const toastMottle = Math.max(0, Math.sin(px * 5.2 + pz * 4.1 + Math.sin(pz * 2.7)) * Math.cos(pz * 6.1 - px * 3.4) - 0.08)
         + 0.5 * Math.max(0, Math.sin(px * 9.7 - pz * 7.3 + 1.4) * Math.sin(pz * 11.2 + px * 5.1) - 0.25)
-      this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.8 + Math.max(0, z) * 0.075 + scoreCore * 0.28 + toastMottle * crownAmount * 0.078))
+      this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.7 + Math.max(0, z) * 0.055 + scoreCore * 0.19 + toastMottle * crownAmount * 0.06))
       this.color.lerp(this.cut, groove * baking * 0.8)
-      this.color.lerp(this.toasted, scoreCore * baking * 0.55)
+      this.color.lerp(this.toasted, scoreCore * baking * 0.32)
       this.color.lerp(this.raised, scoreEdge * baking * 0.88)
       this.color.lerp(this.toasted, baking * Math.min(1, bakeBlister * 90) * 0.1)
       const flour = Math.max(0, Math.sin(px * 12 + pz * 7) * Math.sin(pz * 18 - px * 3.5) - 0.34)
@@ -1255,103 +1257,132 @@ function breadKnife(quality: QualityConfig) {
   return group
 }
 
-function crumbFaceGeometry() {
+type CrumbPore = readonly [y: number, z: number, tier: number, twist: number]
+
+const MAIN_CRUMB_PORES: CrumbPore[] = [
+  [0.43, 0.02, 0, -0.42], [0.47, -0.08, 1, 0.36], [0.36, 0.11, 1, -0.22],
+  [0.25, 0.17, 1, 0.55], [0.56, -0.21, 1, -0.32], [0.62, 0.06, 0, 0.18],
+  [0.31, 0.27, 2, -0.64], [0.52, 0.2, 2, 0.42],
+]
+
+const SLICE_CRUMB_PORES: CrumbPore[] = [
+  [-0.12, -0.16, 1, 0.32], [0.1, 0.09, 0, -0.38], [0.23, -0.04, 2, 0.5],
+  [-0.02, 0.22, 1, -0.22], [-0.2, 0.12, 0, 0.68], [0.16, -0.2, 1, -0.5],
+  [0.31, 0.04, 1, 0.16],
+]
+
+function crumbFaceShape() {
   const face = new T.Shape()
   face.moveTo(-0.48, -0.34)
-  face.bezierCurveTo(-0.53, -0.06, -0.46, 0.26, -0.2, 0.39)
-  face.bezierCurveTo(-0.04, 0.48, 0.24, 0.42, 0.38, 0.26)
-  face.bezierCurveTo(0.51, 0.12, 0.5, -0.14, 0.45, -0.35)
+  face.bezierCurveTo(-0.54, -0.05, -0.47, 0.28, -0.2, 0.405)
+  face.bezierCurveTo(-0.06, 0.49, 0.22, 0.445, 0.39, 0.275)
+  face.bezierCurveTo(0.52, 0.12, 0.505, -0.15, 0.45, -0.35)
   face.lineTo(-0.48, -0.34)
-  return new T.ShapeGeometry(face, 6)
+  return face
 }
 
-function crumbPoreTexture(seed: number) {
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = 64
-  const context = canvas.getContext('2d')!
-  // Irregular blotchy pore: a few overlapping offset lobes, never one circle.
-  const rand = createRandom(9100 + seed * 733)
-  const blobs = 2 + Math.floor(rand() * 2)
-  for (let i = 0; i < blobs; i += 1) {
-    const cx = 32 + (rand() - 0.5) * 22
-    const cy = 32 + (rand() - 0.5) * 22
-    const r = 12 + rand() * 14
-    const shadow = context.createRadialGradient(cx - r * 0.2, cy - r * 0.25, 1, cx, cy, r)
-    shadow.addColorStop(0, 'rgba(66,31,12,0.94)')
-    shadow.addColorStop(0.55, 'rgba(103,54,23,0.8)')
-    shadow.addColorStop(0.78, 'rgba(243,192,117,0.3)')
-    shadow.addColorStop(1, 'rgba(243,192,117,0)')
-    context.fillStyle = shadow
-    context.beginPath()
-    context.ellipse(cx, cy, r, r * (0.55 + rand() * 0.5), rand() * Math.PI, 0, Math.PI * 2)
-    context.fill()
+function crumbFaceGeometry(pores: readonly CrumbPore[]) {
+  const geometry = new T.ShapeGeometry(crumbFaceShape(), 18)
+  const position = geometry.attributes.position as T.BufferAttribute
+  for (let index = 0; index < position.count; index += 1) {
+    const localZ = position.getX(index)
+    const localY = position.getY(index)
+    let cavity = 0
+    pores.forEach(([y, z, tier]) => {
+      const radius = [0.058, 0.041, 0.025][tier]
+      cavity = Math.max(cavity, Math.exp(-(((localY - y) / radius) ** 2 + ((localZ - z) / (radius * 1.35)) ** 2)))
+    })
+    const broad = Math.sin(localZ * 14.5 + localY * 7.2) * 0.0022 + Math.cos(localY * 19 - localZ * 5) * 0.0013
+    const perimeterWobble = 1 + Math.sin(localY * 18.4 + localZ * 7.1) * 0.008
+    position.setX(index, localZ * perimeterWobble)
+    position.setY(index, localY * (1 + Math.cos(localZ * 15.1 - localY * 4.2) * 0.004))
+    position.setZ(index, broad - cavity * 0.009)
   }
-  const texture = new T.CanvasTexture(canvas)
-  texture.colorSpace = T.SRGBColorSpace
-  return texture
+  position.needsUpdate = true
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function irregularPoreGeometry(seed: number) {
+  const random = createRandom(11807 + seed * 641)
+  const points = 9 + Math.floor(random() * 4)
+  const outline = new T.Shape()
+  for (let index = 0; index <= points; index += 1) {
+    const t = index / points * Math.PI * 2
+    const wobble = 0.78 + random() * 0.28 + Math.sin(t * (2 + seed % 3) + seed) * 0.08
+    const x = Math.cos(t) * wobble
+    const y = Math.sin(t) * wobble * (0.68 + random() * 0.26)
+    if (index === 0) outline.moveTo(x, y)
+    else outline.lineTo(x, y)
+  }
+  const geometry = new T.ShapeGeometry(outline, 8)
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function sliceBodyGeometry(quality: QualityConfig) {
+  const geometry = new T.SphereGeometry(1, quality.mobile ? 32 : quality.tier === 'high' ? 54 : 44, quality.mobile ? 22 : quality.tier === 'high' ? 34 : 28)
+  const position = geometry.attributes.position as T.BufferAttribute
+  for (let index = 0; index < position.count; index += 1) {
+    const x = position.getX(index)
+    const y = position.getY(index)
+    const z = position.getZ(index)
+    const crown = Math.max(0, y)
+    const handmade = Math.sin(z * 4.6 + y * 3.2) * 0.014 + Math.sin(z * 10.4 - y * 4.1) * 0.004
+    position.setY(index, y + crown * handmade - Math.max(0, -y) * 0.012)
+    position.setZ(index, z * (1 + crown * 0.024))
+    position.setX(index, x * (1 - crown * 0.025))
+  }
+  position.needsUpdate = true
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function addPores(parent: T.Object3D, pores: readonly CrumbPore[], baseX: number, materials: { edge: T.Material; cavity: T.Material }) {
+  const sizes = [0.038, 0.027, 0.016]
+  pores.forEach(([y, z, tier, twist], index) => {
+    const radius = sizes[tier] * (0.9 + (index % 3) * 0.07)
+    const geometry = irregularPoreGeometry(index + tier * 7)
+    const rim = mesh(geometry, materials.edge, parent, baseX + 0.001, y, z)
+    rim.rotation.y = Math.PI / 2
+    rim.rotation.z = twist
+    rim.scale.set(radius * 1.55, radius * 1.28, 1)
+    rim.castShadow = rim.receiveShadow = false
+    const cavity = mesh(geometry.clone(), materials.cavity, parent, baseX + 0.003, y + radius * 0.025, z + radius * 0.03)
+    cavity.rotation.y = Math.PI / 2
+    cavity.rotation.z = twist + 0.08
+    cavity.scale.set(radius, radius * 0.72, 1)
+    cavity.castShadow = cavity.receiveShadow = false
+  })
 }
 
 function breadCutDetails(quality: QualityConfig) {
   const group = new T.Group()
   group.name = 'bread-cut-reveal'
-  const crumbMaterial = mat(0xfff3d2, quality, 'crumb', { roughness: 0.97, side: T.DoubleSide, emissive: 0x4b2510, emissiveIntensity: 0.035 })
-  const crustMaterial = mat(0x843515, quality, 'crust', { roughness: 0.94, bumpScale: 0.027 })
-  const poreMaterials = [0, 1, 2].map((seed) => new T.MeshStandardMaterial({ map: crumbPoreTexture(seed), color: 0xffffff, roughness: 1, metalness: 0, transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }))
-  const faceGeometry = crumbFaceGeometry()
-  const mainCrustFace = mesh(faceGeometry, crustMaterial, group, 0.806, 0.43, 0)
+  const crumbMaterial = mat(0xffedc9, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.012 })
+  const crustMaterial = mat(0xa86529, quality, 'crust', { roughness: 0.9, bumpScale: 0.021 })
+  const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf4d9a6, roughness: 1, metalness: 0, transparent: true, opacity: 0.42, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+  const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xbd8750, roughness: 1, metalness: 0, transparent: true, opacity: 0.48, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+  const mainCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, group, 0.806, 0.43, 0)
   mainCrustFace.rotation.y = Math.PI / 2
-  mainCrustFace.scale.set(1, 1, 1)
-  const mainFace = mesh(faceGeometry, crumbMaterial, group, 0.821, 0.43, 0)
+  const mainFace = mesh(crumbFaceGeometry(MAIN_CRUMB_PORES), crumbMaterial, group, 0.821, 0.43, 0)
   mainFace.rotation.y = Math.PI / 2
-  mainFace.scale.set(0.93, 0.95, 0.94)
+  mainFace.scale.set(0.91, 0.94, 0.905)
 
   const slice = new T.Group()
   slice.name = 'separated-slice'
-  const sliceBody = mesh(new T.SphereGeometry(1, 28, 18), crustMaterial, slice)
+  const sliceBody = mesh(sliceBodyGeometry(quality), crustMaterial, slice)
   sliceBody.scale.set(0.145, 0.44, 0.57)
-  const sliceFace = mesh(faceGeometry, crumbMaterial, slice, 0.151, 0, 0)
+  const sliceCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, slice, 0.149, 0, 0)
+  sliceCrustFace.rotation.y = Math.PI / 2
+  const sliceFace = mesh(crumbFaceGeometry(SLICE_CRUMB_PORES), crumbMaterial, slice, 0.151, 0, 0)
   sliceFace.rotation.y = Math.PI / 2
-  sliceFace.scale.set(0.94, 0.96, 0.95)
+  sliceFace.scale.set(0.905, 0.94, 0.9)
   slice.position.set(0.88, 0.44, 0)
   group.add(slice)
 
-  const crumbShadeMaterial = new T.MeshBasicMaterial({ color: 0xd59d59, transparent: true, opacity: 0.14, side: T.DoubleSide, depthWrite: false })
-  const mainShadePatches = [[0.38, -0.17, 0.085], [0.19, 0.12, 0.055], [0.55, 0.2, 0.07]]
-  mainShadePatches.forEach(([y, z, radius], index) => {
-    const patch = mesh(new T.CircleGeometry(radius, 12), crumbShadeMaterial, group, 0.825, y, z)
-    patch.rotation.y = Math.PI / 2
-    patch.scale.y = 0.62 + index * 0.12
-  })
-  // Clustered organic distribution: large + medium + tiny pores, varied squash.
-  const poreSizes = [0.03, 0.022, 0.012]
-  const porePositions: [number, number, number][] = [
-    [0.42, 0.03, 0], [0.47, -0.06, 1], [0.37, 0.1, 1], [0.5, 0.12, 2], [0.33, -0.08, 2],
-    [0.24, 0.18, 1], [0.58, -0.2, 1], [0.62, 0.05, 0], [0.2, -0.2, 2], [0.68, 0.16, 2], [0.3, 0.27, 1],
-  ]
-  porePositions.forEach(([y, z, tier], index) => {
-    const pore = mesh(new T.CircleGeometry(1, 10), poreMaterials[(index + tier) % 3], group, 0.829 + (index % 3) * 0.0015, y, z)
-    pore.rotation.y = Math.PI / 2
-    const radius = poreSizes[tier] * (0.85 + ((index * 37) % 10) / 10 * 0.3)
-    pore.scale.set(radius, radius * (0.5 + ((index * 53) % 10) / 10 * 0.7), radius)
-    pore.rotation.x = (index % 2 ? -1 : 1) * (0.1 + ((index * 29) % 10) / 10 * 0.15)
-  })
-  const sliceShadePatches = [[-0.04, -0.12, 0.075], [0.18, 0.15, 0.058]]
-  sliceShadePatches.forEach(([y, z, radius], index) => {
-    const patch = mesh(new T.CircleGeometry(radius, 12), crumbShadeMaterial, slice, 0.155, y, z)
-    patch.rotation.y = Math.PI / 2
-    patch.scale.y = 0.66 + index * 0.15
-  })
-  const slicePores: [number, number, number][] = [
-    [-0.12, -0.16, 1], [0.1, 0.09, 0], [0.23, -0.04, 2], [-0.02, 0.22, 1], [0.27, 0.2, 2],
-    [-0.2, 0.12, 0], [0.16, -0.2, 1], [-0.24, -0.05, 2], [0.31, 0.04, 1], [-0.06, -0.01, 2],
-  ]
-  slicePores.forEach(([y, z, tier], index) => {
-    const pore = mesh(new T.CircleGeometry(1, 10), poreMaterials[(index + tier + 1) % 3], slice, 0.158 + (index % 2) * 0.0015, y, z)
-    pore.rotation.y = Math.PI / 2
-    const radius = poreSizes[tier] * (0.85 + ((index * 41) % 10) / 10 * 0.3)
-    pore.scale.set(radius, radius * (0.5 + ((index * 47) % 10) / 10 * 0.7), radius)
-    pore.rotation.x = (index % 2 ? -1 : 1) * (0.1 + ((index * 31) % 10) / 10 * 0.15)
-  })
+  addPores(group, MAIN_CRUMB_PORES, 0.824, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
+  addPores(slice, SLICE_CRUMB_PORES, 0.154, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
 
   const crumbs = Array.from({ length: 8 }, (_, index) => {
     const size = 0.014 + random() * 0.019
