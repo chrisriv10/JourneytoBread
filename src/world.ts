@@ -274,6 +274,9 @@ export class JourneyWorld {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 0.92
+    // Required for the finale loaf clip plane. Planes are parked far away
+    // when inactive, so this costs nothing outside the cut handoff.
+    this.renderer.localClippingEnabled = true
     this.renderer.shadowMap.enabled = quality.shadows
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.domElement.setAttribute('aria-hidden', 'true')

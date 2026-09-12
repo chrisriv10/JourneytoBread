@@ -29,6 +29,9 @@ export type JourneySequence = {
 
 const temp = new T.Vector3()
 const temp2 = new T.Vector3()
+const _clipPoint = new T.Vector3()
+const _clipNormal = new T.Vector3()
+const _clipQuat = new T.Quaternion()
 const CONTACT_EPSILON = 0.003
 
 type SupportSurface = {
@@ -59,12 +62,8 @@ const SCORE_SPECS = [
   { center: 0.5, width: 0.87, depth: 0.8, curve: -0.011, angle: 0.44, length: 0.82, lip: 0.62 },
 ] as const
 
-const BAKED_CUT_START_X = 1.38
-const BAKED_CUT_END_X = 0.72
-
-function bakedCutPlane(progress: number) {
-  return T.MathUtils.lerp(BAKED_CUT_START_X, BAKED_CUT_END_X, windowProgress(progress, 0.989, 0.998))
-}
+const BAKED_CUT_X = 0.72
+const BAKED_SLICE_THICKNESS = 0.1
 
 function createRandom(initial: number) {
   let seed = initial
@@ -247,6 +246,9 @@ class Visibility {
 // All vertex positions are sampled from source coordinates, never last frame's mesh.
 class DoughMorph {
   readonly mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>
+  // World-space clipping plane that opens the loaf at the baked cut plane.
+  // Assigned once (no shader recompiles); parked far away until the handoff.
+  readonly clipPlane = new T.Plane(new T.Vector3(-1, 0, 0), 1e5)
   private readonly original: Float32Array
   private readonly position: T.BufferAttribute
   private readonly colors: T.BufferAttribute
@@ -284,6 +286,48 @@ class DoughMorph {
     }), parent)
     this.mesh.name = 'hero-dough-loaf'
     this.mesh.frustumCulled = false
+    this.mesh.material.clippingPlanes = [this.clipPlane]
+  }
+
+  // Samples the deformed cross-section ring at a dough-local x plane and
+  // resamples it into an ordered closed contour. The position attribute must
+  // currently hold the baked, uncut state (evaluate apply(1) first).
+  sampleCutContour(cutX: number, samples = 72) {
+    const band: { angle: number; y: number; z: number }[] = []
+    let cy = 0
+    let cz = 0
+    let count = 0
+    for (let i = 0; i < this.position.count; i += 1) {
+      if (Math.abs(this.position.getX(i) - cutX) > 0.035) continue
+      cy += this.position.getY(i)
+      cz += this.position.getZ(i)
+      count += 1
+    }
+    if (count === 0) throw new Error('Baked loaf cross-section band is empty')
+    cy /= count
+    cz /= count
+    for (let i = 0; i < this.position.count; i += 1) {
+      if (Math.abs(this.position.getX(i) - cutX) > 0.035) continue
+      const y = this.position.getY(i)
+      const z = this.position.getZ(i)
+      band.push({ angle: Math.atan2(z - cz, y - cy), y, z })
+    }
+    band.sort((a, b) => a.angle - b.angle)
+    const contour: { y: number; z: number }[] = []
+    for (let k = 0; k < samples; k += 1) {
+      const target = -Math.PI + (k / samples) * Math.PI * 2
+      let j = 0
+      while (j < band.length - 1 && band[j + 1].angle < target) j += 1
+      const a = band[j]
+      const b = band[(j + 1) % band.length]
+      let span = b.angle - a.angle
+      if (span <= 0) span += Math.PI * 2
+      let local = target - a.angle
+      if (local < 0) local += Math.PI * 2
+      const t = span > 0 ? T.MathUtils.clamp(local / span, 0, 1) : 0
+      contour.push({ y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t })
+    }
+    return { contour, centroid: { y: cy, z: cz } }
   }
 
   apply(p: number) {
@@ -309,7 +353,6 @@ class DoughMorph {
       this.mesh.material.needsUpdate = true
       this.showingCrustSurface = useCrustSurface
     }
-    const cutPlane = bakedCutPlane(p)
     const width = 0.8 + mixing * 0.12 + shaping * 0.2 + proof * 0.18 + spring * 0.14
     const height = 0.08 + mixing * 0.56 + proof * 0.2 + spring * 0.12
     const depth = 0.69 + mixing * 0.045 + proof * 0.06 - baking * 0.018
@@ -353,12 +396,10 @@ class DoughMorph {
         + spring * 0.04 * Math.sin(x * 1.7 + 0.4)
       const crownShape = baking * crown * (0.018 + 0.016 * Math.exp(-((x + 0.08) ** 2 + (z - 0.04) ** 2) / 0.36))
       const baseSettle = baking * Math.max(0, 0.18 - py) * 0.38
-      py += spring * crown * (0.02 * Math.sin(x * 4.4 + 0.7) + 0.012 * Math.sin(x * 7.9 - z * 2.2) + x * 0.014) + crownShape - baseSettle
-      // Remove only the volume beyond the moving blade plane. The previous
-      // lerp pulled every right-side vertex toward the plane, visibly shrinking
-      // the loaf instead of cutting it.
-      if (px > cutPlane) px = cutPlane
-      let groove = 0
+    py += spring * crown * (0.02 * Math.sin(x * 4.4 + 0.7) + 0.012 * Math.sin(x * 7.9 - z * 2.2) + x * 0.014) + crownShape - baseSettle
+    // No vertex collapsing here: the loaf keeps valid baked topology through
+    // the knife travel, and a tracked clipping plane opens it at the handoff.
+    let groove = 0
       let scoreCore = 0
       let scoreEdge = 0
       let scoreLip = 0
@@ -1272,46 +1313,102 @@ function breadKnife(quality: QualityConfig) {
 
 type CrumbPore = readonly [y: number, z: number, tier: number, twist: number]
 
-const MAIN_CRUMB_PORES: CrumbPore[] = [
-  [0.43, 0.02, 0, -0.42], [0.47, -0.08, 1, 0.36], [0.36, 0.11, 1, -0.22],
-  [0.25, 0.17, 1, 0.55], [0.56, -0.21, 1, -0.32], [0.62, 0.06, 0, 0.18],
-  [0.31, 0.27, 2, -0.64], [0.52, 0.2, 2, 0.42],
-]
+type CutContour = { contour: { y: number; z: number }[]; centroid: { y: number; z: number } }
 
-const SLICE_CRUMB_PORES: CrumbPore[] = [
-  [-0.12, -0.16, 1, 0.32], [0.1, 0.09, 0, -0.38], [0.23, -0.04, 2, 0.5],
-  [-0.02, 0.22, 1, -0.22], [-0.2, 0.12, 0, 0.68], [0.16, -0.2, 1, -0.5],
-  [0.31, 0.04, 1, 0.16],
-]
-
-function crumbFaceShape(scaleX = 1, scaleY = 1) {
-  const face = new T.Shape()
-  face.moveTo(-0.48 * scaleX, -0.34 * scaleY)
-  face.bezierCurveTo(-0.54 * scaleX, -0.05 * scaleY, -0.47 * scaleX, 0.28 * scaleY, -0.2 * scaleX, 0.405 * scaleY)
-  face.bezierCurveTo(-0.06 * scaleX, 0.49 * scaleY, 0.22 * scaleX, 0.445 * scaleY, 0.39 * scaleX, 0.275 * scaleY)
-  face.bezierCurveTo(0.52 * scaleX, 0.12 * scaleY, 0.505 * scaleX, -0.15 * scaleY, 0.45 * scaleX, -0.35 * scaleY)
-  face.lineTo(-0.48 * scaleX, -0.34 * scaleY)
-  return face
+// Shape coordinates are (x=-z, y=y): after rotateY(+PI/2) the face lies in
+// the dough-local x=0 plane with +x normals and true (y,z) positions.
+function contourShape(contour: { y: number; z: number }[]) {
+  const shape = new T.Shape()
+  contour.forEach((point, index) => {
+    if (index === 0) shape.moveTo(-point.z, point.y)
+    else shape.lineTo(-point.z, point.y)
+  })
+  shape.closePath()
+  return shape
 }
 
-function crumbFaceGeometry(pores: readonly CrumbPore[]) {
-  const geometry = new T.ShapeGeometry(crumbFaceShape(), 18)
-  const position = geometry.attributes.position as T.BufferAttribute
-  for (let index = 0; index < position.count; index += 1) {
-    const localZ = position.getX(index)
-    const localY = position.getY(index)
-    let cavity = 0
-    pores.forEach(([y, z, tier]) => {
-      const radius = [0.058, 0.041, 0.025][tier]
-      cavity = Math.max(cavity, Math.exp(-(((localY - y) / radius) ** 2 + ((localZ - z) / (radius * 1.35)) ** 2)))
-    })
-    const broad = Math.sin(localZ * 14.5 + localY * 7.2) * 0.0022 + Math.cos(localY * 19 - localZ * 5) * 0.0013
-    const perimeterWobble = 1 + Math.sin(localY * 18.4 + localZ * 7.1) * 0.008
-    position.setX(index, localZ * perimeterWobble)
-    position.setY(index, localY * (1 + Math.cos(localZ * 15.1 - localY * 4.2) * 0.004))
-    position.setZ(index, broad - cavity * 0.009)
+function erodeContour(contour: { y: number; z: number }[], centroid: { y: number; z: number }, amount: number) {
+  return contour.map((point) => ({
+    y: centroid.y + (point.y - centroid.y) * (1 - amount),
+    z: centroid.z + (point.z - centroid.z) * (1 - amount),
+  }))
+}
+
+function insideContour(y: number, z: number, contour: { y: number; z: number }[]) {
+  let inside = false
+  for (let i = 0, j = contour.length - 1; i < contour.length; j = i++) {
+    const yi = contour[i].y
+    const zi = contour[i].z
+    const yj = contour[j].y
+    const zj = contour[j].z
+    if ((zi > z) !== (zj > z) && y < ((yj - yi) * (z - zi)) / (zj - zi) + yi) inside = !inside
   }
-  position.needsUpdate = true
+  return inside
+}
+
+// Deterministic clustered pores, guaranteed inside the sampled contour.
+function sampleContourPores(seed: number, cut: CutContour, count: number): CrumbPore[] {
+  const rand = createRandom(seed)
+  let minY = Infinity
+  let maxY = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  cut.contour.forEach((point) => {
+    minY = Math.min(minY, point.y)
+    maxY = Math.max(maxY, point.y)
+    minZ = Math.min(minZ, point.z)
+    maxZ = Math.max(maxZ, point.z)
+  })
+  const clusters: { y: number; z: number }[] = []
+  let clusterGuard = 0
+  while (clusters.length < 2 && clusterGuard < 40) {
+    clusterGuard += 1
+    const y = minY + rand() * (maxY - minY)
+    const z = minZ + rand() * (maxZ - minZ)
+    if (insideContour(y, z, cut.contour)) clusters.push({ y, z })
+  }
+  const pores: CrumbPore[] = []
+  let guard = 0
+  while (pores.length < count && guard < count * 80) {
+    guard += 1
+    let y: number
+    let z: number
+    if (clusters.length > 0 && rand() < 0.6) {
+      const cluster = clusters[Math.floor(rand() * clusters.length)]
+      const spread = 0.16
+      y = cluster.y + ((rand() + rand() + rand()) / 3 - 0.5) * 2 * spread
+      z = cluster.z + ((rand() + rand() + rand()) / 3 - 0.5) * 2 * spread
+    } else {
+      y = minY + rand() * (maxY - minY)
+      z = minZ + rand() * (maxZ - minZ)
+    }
+    if (!insideContour(y, z, cut.contour)) continue
+    const tier = rand() < 0.22 ? 0 : rand() < 0.6 ? 1 : 2
+    pores.push([y, z, tier, (rand() - 0.5) * 1.2])
+  }
+  while (pores.length < count) pores.push([cut.centroid.y, cut.centroid.z, 1, 0])
+  return pores
+}
+
+function capGeometry(cut: CutContour, erode: number, planeX: number, pores: readonly CrumbPore[] | null) {
+  const geometry = new T.ShapeGeometry(contourShape(erode > 0 ? erodeContour(cut.contour, cut.centroid, erode) : cut.contour))
+  if (pores) {
+    const position = geometry.attributes.position as T.BufferAttribute
+    for (let index = 0; index < position.count; index += 1) {
+      const localY = position.getY(index)
+      const localZ = -position.getX(index)
+      let cavity = 0
+      pores.forEach(([y, z, tier]) => {
+        const radius = [0.058, 0.041, 0.025][tier]
+        cavity = Math.max(cavity, Math.exp(-(((localY - y) / radius) ** 2 + ((localZ - z) / (radius * 1.35)) ** 2)))
+      })
+      const broad = Math.sin(localZ * 14.5 + localY * 7.2) * 0.0022 + Math.cos(localY * 19 - localZ * 5) * 0.0013
+      position.setZ(index, broad - cavity * 0.009)
+    }
+    position.needsUpdate = true
+  }
+  geometry.rotateY(Math.PI / 2)
+  geometry.translate(planeX, 0, 0)
   geometry.computeVertexNormals()
   return geometry
 }
@@ -1329,25 +1426,6 @@ function irregularPoreGeometry(seed: number) {
     else outline.lineTo(x, y)
   }
   const geometry = new T.ShapeGeometry(outline, 8)
-  geometry.computeVertexNormals()
-  return geometry
-}
-
-function sliceBodyGeometry(quality: QualityConfig) {
-  // This is a bread slice, not a second miniature loaf. Keep the extrusion
-  // shallow so the shared cut profile remains the visual subject.
-  const depth = quality.mobile ? 0.084 : 0.098
-  const geometry = new T.ExtrudeGeometry(crumbFaceShape(), {
-    depth,
-    steps: 1,
-    curveSegments: quality.mobile ? 14 : quality.tier === 'high' ? 26 : 20,
-    bevelEnabled: true,
-    bevelSegments: quality.mobile ? 2 : 3,
-    bevelSize: 0.018,
-    bevelThickness: 0.014,
-  })
-  geometry.rotateY(Math.PI / 2)
-  geometry.translate(-depth * 0.5, 0, 0)
   geometry.computeVertexNormals()
   return geometry
 }
@@ -1370,47 +1448,46 @@ function addPores(parent: T.Object3D, pores: readonly CrumbPore[], baseX: number
   })
 }
 
-function breadCutDetails(quality: QualityConfig) {
+function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   const group = new T.Group()
   group.name = 'bread-cut-reveal'
   const mainCut = new T.Group()
   mainCut.name = 'main-cut-cap'
   group.add(mainCut)
-  const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022 })
-  const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021 })
+  // Solid cut pieces stay opaque: reveals are discrete object visibility, so
+  // nothing here can ghost through transparency sorting. Decal pore materials
+  // below are the only transparent surfaces, and their opacity never changes.
+  const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022, transparent: false, opacity: 1 })
+  const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021, transparent: false, opacity: 1 })
   const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf5d9a2, roughness: 1, metalness: 0, transparent: true, opacity: 0.28, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xc99a65, roughness: 1, metalness: 0, transparent: true, opacity: 0.25, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
-  const mainCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, mainCut, 0.806, 0.43, 0)
-  mainCrustFace.rotation.y = Math.PI / 2
-  const mainFace = mesh(crumbFaceGeometry(MAIN_CRUMB_PORES), crumbMaterial, mainCut, 0.821, 0.43, 0)
-  mainFace.rotation.y = Math.PI / 2
-  // Keep a restrained crust lip around the crumb instead of the old thick
-  // decal-like ring. Both faces use the same profile, so the cut reads as one
-  // continuous end cap.
-  mainFace.scale.set(0.958, 0.978, 0.955)
+  // Both cap layers derive from the sampled loaf cross-section: full-contour
+  // crust with a slightly eroded crumb face, so the rim reads as real crust
+  // thickness rather than a decal outline.
+  mesh(capGeometry(cut, 0, BAKED_CUT_X, null), crustMaterial, mainCut)
+  const mainPores = sampleContourPores(4242, cut, 8)
+  const mainFace = mesh(capGeometry(cut, 0.04, BAKED_CUT_X + 0.0008, mainPores), crumbMaterial, mainCut)
+  mainCut.visible = false
 
   const slice = new T.Group()
   slice.name = 'separated-slice'
-  const sliceBody = mesh(sliceBodyGeometry(quality), crustMaterial, slice)
-  sliceBody.scale.set(1, 1.06, 1.12)
-  const sliceCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, slice, 0.055, 0, 0)
-  sliceCrustFace.rotation.y = Math.PI / 2
-  const sliceFace = mesh(crumbFaceGeometry(SLICE_CRUMB_PORES), crumbMaterial, slice, 0.059, 0, 0)
-  sliceFace.rotation.y = Math.PI / 2
-  sliceFace.scale.set(0.955, 0.978, 0.95)
-  // The camera approaches from +z/+x. A small yaw turns the cut plane toward
-  // it, keeping the slice legible without presenting a thick crust edge.
-  slice.scale.set(0.88, 0.9, 0.88)
-  slice.rotation.y = -0.28
-  // Keep the shared profile just in front of the loaf's cut plane so the
-  // crumb face cannot be occluded by the still-visible main end cap during
-  // the first knife-contact frames. The lower y anchor puts the body on the
-  // board with the new extruded profile.
-  slice.position.set(0.77, 0.35, 0)
+  // The slice is the same canonical contour extruded: back lid lands exactly
+  // on the loaf cut plane, so pre-separation it fits back like the missing
+  // piece. No profile scaling, no yaw compensation. Pose-only animation after.
+  const sliceGeometry = new T.ExtrudeGeometry(contourShape(cut.contour), { depth: BAKED_SLICE_THICKNESS, steps: 1, bevelEnabled: false })
+  sliceGeometry.rotateY(Math.PI / 2)
+  sliceGeometry.translate(BAKED_CUT_X, 0, 0)
+  sliceGeometry.computeVertexNormals()
+  const sliceBody = new T.Mesh(sliceGeometry, [crumbMaterial, crustMaterial])
+  sliceBody.castShadow = true
+  sliceBody.receiveShadow = true
+  slice.add(sliceBody)
+  const slicePores = sampleContourPores(4343, cut, 7)
+  addPores(slice, slicePores, BAKED_CUT_X + BAKED_SLICE_THICKNESS + 0.0015, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
+  slice.visible = false
   group.add(slice)
 
-  addPores(mainCut, MAIN_CRUMB_PORES, 0.824, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
-  addPores(slice, SLICE_CRUMB_PORES, 0.063, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
+  addPores(mainCut, mainPores, BAKED_CUT_X + 0.0025, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
 
   const crumbs = Array.from({ length: 8 }, (_, index) => {
     const size = 0.014 + random() * 0.019
@@ -1425,12 +1502,7 @@ function breadCutDetails(quality: QualityConfig) {
       drift: (random() - 0.5) * 0.12,
     }
   })
-  const setCutPlane = (plane: number) => {
-    // The cap is authored around the completed plane at x=.72. Moving this
-    // group keeps it attached to the actual blade position during the cut.
-    mainCut.position.x = plane - BAKED_CUT_END_X
-  }
-  return { group, mainCut, slice, crumbs, setCutPlane }
+  return { group, mainCut, slice, crumbs }
 }
 
 function contactShadow(parent: T.Object3D, width: number, depth: number) {
@@ -1535,7 +1607,11 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   group.add(mixtureClumps)
 
   const dough = new DoughMorph(group, quality)
-  const cutDetails = breadCutDetails(quality)
+  // Derive the cut profile from the actual baked loaf: evaluate the full
+  // deformation once, sample the cross-section ring at the cut plane, and
+  // build the cap and slice from that contour. No hand-authored profile.
+  dough.apply(1)
+  const cutDetails = breadCutDetails(quality, dough.sampleCutContour(BAKED_CUT_X))
   // Keep the parent alive so the cap and separated slice can be revealed
   // independently without fading solid geometry over the loaf.
   cutDetails.group.visible = true
@@ -1619,8 +1695,6 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
     additions: new Visibility(additions), clumps: new Visibility(mixtureClumps), basket: new Visibility(basket),
     oven: new Visibility(ovenModel.group), peel: new Visibility(peel),
     final: new Visibility(finalBoard), knife: new Visibility(knife),
-    cut: new Visibility(cutDetails.mainCut),
-    slice: new Visibility(cutDetails.slice),
   }
   const kernelHome = new T.Vector3(-0.155, 1.98, 0.26)
   const kernelFocus = new T.Vector3(0, 1.5, 0.65)
@@ -1835,31 +1909,30 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       if (p >= 0.925) arcPosition(ovenDestination, finalDestination, finish, 0.28 * flourish, dough.mesh.position)
       dough.mesh.rotation.y += finish * -0.12
       const knifeCut = windowProgress(p, 0.989, 0.997)
-      // Wait for the persistent loaf to finish flattening into its cut plane
-      // before revealing the matching slice. This prevents a temporary second
-      // silhouette from appearing while the loaf is still changing shape.
-      // The exposed crumb cap is a solid surface, not a translucent overlay.
-      // Reveal it once the blade has cleared the plane to avoid the gray ghost
-      // produced by fading it over the still-visible crust.
-      const cutReveal = p >= 0.9985 ? 1 : 0
+      // The loaf keeps valid baked topology through the knife travel; the
+      // blade motion sells the cut. At the handoff the tracked clip plane
+      // opens the loaf exactly where the matching cap and fitted slice appear
+      // behind the blade. Solid pieces use discrete visibility, never opacity.
+      const cutHandoff = p >= 0.9985
       const sliceSeparate = windowProgress(p, 0.998, 1)
-      const cutPlane = bakedCutPlane(p)
       sampleVectorSplineKeyframes(p, knifePositionKeys, knifePosition)
       sampleVectorSplineKeyframes(p, knifeRotationKeys, knifeRotation)
       knife.position.copy(knifePosition)
       knife.rotation.set(knifeRotation.x, knifeRotation.y, knifeRotation.z)
       visibility.knife.set(overlap(p, 0.965, 1, 0.007))
-      visibility.cut.set(cutReveal)
-      // Do not crossfade a solid slice through the loaf. It becomes opaque
-      // only after the blade has cleared the cut plane, eliminating the gray
-      // transparency flash during the contact beat.
-      visibility.slice.set(p >= 0.9988 ? 1 : 0)
-      cutDetails.setCutPlane(cutPlane)
-      // Keep the cut piece just beyond the blade plane, then carry it outward
-      // after contact so the camera can read the matching face clearly.
-      // The cut plane supplies the separation in x; a small z travel gives the
-      // slice depth without carrying it out of the final camera's framing.
-      cutDetails.slice.position.set(cutPlane + 0.22, 0.35 - sliceSeparate * 0.018, sliceSeparate * 0.1)
+      if (cutHandoff) {
+        dough.mesh.getWorldQuaternion(_clipQuat)
+        _clipNormal.set(-1, 0, 0).applyQuaternion(_clipQuat)
+        _clipPoint.set(BAKED_CUT_X, 0.45, 0).applyMatrix4(dough.mesh.matrixWorld)
+        dough.clipPlane.normal.copy(_clipNormal)
+        dough.clipPlane.constant = -_clipNormal.dot(_clipPoint)
+      } else {
+        dough.clipPlane.constant = 1e5
+      }
+      cutDetails.mainCut.visible = cutHandoff
+      cutDetails.slice.visible = p >= 0.9988
+      // The slice starts fitted exactly onto the loaf; only pose changes after.
+      cutDetails.slice.position.set(sliceSeparate * 0.32, -sliceSeparate * 0.018, sliceSeparate * 0.1)
       cutDetails.slice.rotation.z = -sliceSeparate * 0.1
       cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)
