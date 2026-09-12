@@ -54,9 +54,9 @@ function groundedY(surfaceY: number, localBottomY: number) {
 }
 
 const SCORE_SPECS = [
-  { center: -0.52, width: 0.88, depth: 1.0, curve: -0.014, angle: 0.47, length: 0.9, lip: 0.65 },
-  { center: 0, width: 1.08, depth: 1.2, curve: 0.018, angle: 0.38, length: 1.0, lip: 1.0 },
-  { center: 0.5, width: 0.82, depth: 0.85, curve: -0.011, angle: 0.44, length: 0.82, lip: 0.55 },
+  { center: -0.52, width: 0.92, depth: 0.94, curve: -0.014, angle: 0.47, length: 0.9, lip: 0.72 },
+  { center: 0, width: 1.08, depth: 1.12, curve: 0.018, angle: 0.38, length: 1.0, lip: 1.0 },
+  { center: 0.5, width: 0.87, depth: 0.8, curve: -0.011, angle: 0.44, length: 0.82, lip: 0.62 },
 ] as const
 
 function createRandom(initial: number) {
@@ -251,10 +251,10 @@ class DoughMorph {
   private readonly pale = new T.Color(PALETTE.flour)
   private readonly wet = new T.Color(0xd8ae72)
   private readonly proofed = new T.Color(0xe5bb78)
-  private readonly crust = new T.Color(0xd19143)
-  private readonly toasted = new T.Color(0x6b3b18)
-  private readonly cut = new T.Color(0xf0cb8d)
-  private readonly raised = new T.Color(0xf5d39b)
+  private readonly crust = new T.Color(0xd79b50)
+  private readonly toasted = new T.Color(0x75451f)
+  private readonly cut = new T.Color(0xf2d19a)
+  private readonly raised = new T.Color(0xffdda0)
 
   constructor(parent: T.Object3D, quality: QualityConfig) {
     // This is the one persistent hero mesh. A denser crown and end-cap keep
@@ -287,7 +287,10 @@ class DoughMorph {
     const proof = windowProgress(p, 0.705, 0.778)
     const spring = windowProgress(p, 0.834, 0.885)
     const baking = windowProgress(p, 0.842, 0.925)
-    const scoring = windowProgress(p, 0.776, 0.803)
+    // Scoring is introduced during the shaping beat, then remains part of the
+    // baked form. The old finite window accidentally erased every score again
+    // before the final product shot.
+    const scoring = p < 0.776 ? 0 : windowProgress(p, 0.776, 0.803)
     const knead = windowProgress(p, 0.61, 0.69, (t) => t)
     const pressure = Math.sin(knead * Math.PI * 3) ** 2 * bell(knead)
     const useCrustSurface = baking > 0.28
@@ -338,29 +341,31 @@ class DoughMorph {
       let pz = z * depth * endTaper * (1 - pressure * 0.09) + wetEdge * 0.42
       // Baked expansion: full shoulders, gently pinched base, fuller +z flank,
       // slight longitudinal arc and settle lean. Broad terms only, no noise.
-      const shoulder = 1 + spring * (crown * 0.05 - (1 - foot) * 0.035)
+      const shoulder = 1 + spring * (crown * 0.064 - (1 - foot) * 0.038)
       px *= shoulder
       pz = pz * shoulder
         + spring * crown * (0.045 * Math.max(0, z) - 0.03 * Math.max(0, -z))
         + spring * 0.04 * Math.sin(x * 1.7 + 0.4)
-      py += spring * crown * (0.02 * Math.sin(x * 4.4 + 0.7) + 0.012 * Math.sin(x * 7.9 - z * 2.2) + x * 0.014)
+      const crownShape = baking * crown * (0.018 + 0.016 * Math.exp(-((x + 0.08) ** 2 + (z - 0.04) ** 2) / 0.36))
+      const baseSettle = baking * Math.max(0, 0.18 - py) * 0.38
+      py += spring * crown * (0.02 * Math.sin(x * 4.4 + 0.7) + 0.012 * Math.sin(x * 7.9 - z * 2.2) + x * 0.014) + crownShape - baseSettle
       if (px > 0.72) px = T.MathUtils.lerp(px, 0.72, sliceCut)
       let groove = 0
       let scoreCore = 0
       let scoreEdge = 0
       let scoreLip = 0
       for (const score of SCORE_SPECS) {
-        const scoreWidth = (0.016 + spring * 0.034) * score.width
+        const scoreWidth = (0.019 + spring * 0.039) * score.width
         const scoreCutLine = px + pz * score.angle
         const curvedCenter = score.center + Math.sin(pz * 2.7 + score.center * 3.2) * score.curve
         const distance = Math.abs(scoreCutLine - curvedCenter)
         const lengthMask = windowProgress(y, 0.28, 0.66) * (1 - windowProgress(Math.abs(z), 0.57 * score.length, 0.88 * score.length))
         groove = Math.max(groove, Math.exp(-Math.pow(distance / scoreWidth, 2)) * lengthMask)
-        scoreCore = Math.max(scoreCore, Math.exp(-Math.pow(distance / (scoreWidth * 0.34), 2)) * score.depth * lengthMask)
-        const rim = Math.exp(-Math.pow((distance - scoreWidth * 1.02) / (scoreWidth * 0.58), 2)) * 0.43
+        scoreCore = Math.max(scoreCore, Math.exp(-Math.pow(distance / (scoreWidth * 0.46), 2)) * score.depth * lengthMask)
+        const rim = Math.exp(-Math.pow((distance - scoreWidth * 1.04) / (scoreWidth * 0.72), 2)) * 0.4
         // Baked ear: raised lip on one side of the cut only, strongest centrally.
         const lipDistance = (scoreCutLine - curvedCenter) - scoreWidth * 0.95
-        const lip = Math.exp(-Math.pow(lipDistance / (scoreWidth * 0.6), 2)) * score.lip
+        const lip = Math.exp(-Math.pow(lipDistance / (scoreWidth * 0.75), 2)) * score.lip
         scoreEdge = Math.max(scoreEdge, Math.max(rim, lip) * lengthMask)
         scoreLip = Math.max(scoreLip, lip * lengthMask)
       }
@@ -368,8 +373,8 @@ class DoughMorph {
       scoreCore *= scoring
       scoreEdge *= scoring
       scoreLip *= scoring
-      py -= groove * (0.03 + spring * 0.068)
-      py += scoreLip * (0.006 + spring * 0.012)
+      py -= groove * (0.028 + spring * 0.061)
+      py += scoreLip * (0.007 + spring * 0.014)
       const irregular = Math.sin(px * 21 + pz * 13) * Math.sin(pz * 31 - px * 9)
       const blister = Math.max(0, Math.sin(px * 8.6 + pz * 4.9) * Math.cos(pz * 10.2 - px * 3.3) - 0.7)
       // A few hand-placed baked blisters, visible mainly in grazing light.
@@ -389,9 +394,9 @@ class DoughMorph {
       const toastMottle = Math.max(0, Math.sin(px * 5.2 + pz * 4.1 + Math.sin(pz * 2.7)) * Math.cos(pz * 6.1 - px * 3.4) - 0.08)
         + 0.5 * Math.max(0, Math.sin(px * 9.7 - pz * 7.3 + 1.4) * Math.sin(pz * 11.2 + px * 5.1) - 0.25)
       this.color.lerp(this.toasted, baking * ((1 - crownAmount) * 0.7 + Math.max(0, z) * 0.055 + scoreCore * 0.19 + toastMottle * crownAmount * 0.06))
-      this.color.lerp(this.cut, groove * baking * 0.8)
-      this.color.lerp(this.toasted, scoreCore * baking * 0.32)
-      this.color.lerp(this.raised, scoreEdge * baking * 0.88)
+      this.color.lerp(this.cut, groove * baking * 0.72)
+      this.color.lerp(this.toasted, scoreCore * baking * 0.26)
+      this.color.lerp(this.raised, scoreEdge * baking * 0.82)
       this.color.lerp(this.toasted, baking * Math.min(1, bakeBlister * 90) * 0.1)
       const flour = Math.max(0, Math.sin(px * 12 + pz * 7) * Math.sin(pz * 18 - px * 3.5) - 0.34)
       this.color.lerp(this.pale, flour * crownAmount * baking * (1 - groove) * 0.4)
@@ -1271,13 +1276,13 @@ const SLICE_CRUMB_PORES: CrumbPore[] = [
   [0.31, 0.04, 1, 0.16],
 ]
 
-function crumbFaceShape() {
+function crumbFaceShape(scaleX = 1, scaleY = 1) {
   const face = new T.Shape()
-  face.moveTo(-0.48, -0.34)
-  face.bezierCurveTo(-0.54, -0.05, -0.47, 0.28, -0.2, 0.405)
-  face.bezierCurveTo(-0.06, 0.49, 0.22, 0.445, 0.39, 0.275)
-  face.bezierCurveTo(0.52, 0.12, 0.505, -0.15, 0.45, -0.35)
-  face.lineTo(-0.48, -0.34)
+  face.moveTo(-0.48 * scaleX, -0.34 * scaleY)
+  face.bezierCurveTo(-0.54 * scaleX, -0.05 * scaleY, -0.47 * scaleX, 0.28 * scaleY, -0.2 * scaleX, 0.405 * scaleY)
+  face.bezierCurveTo(-0.06 * scaleX, 0.49 * scaleY, 0.22 * scaleX, 0.445 * scaleY, 0.39 * scaleX, 0.275 * scaleY)
+  face.bezierCurveTo(0.52 * scaleX, 0.12 * scaleY, 0.505 * scaleX, -0.15 * scaleY, 0.45 * scaleX, -0.35 * scaleY)
+  face.lineTo(-0.48 * scaleX, -0.34 * scaleY)
   return face
 }
 
@@ -1321,25 +1326,24 @@ function irregularPoreGeometry(seed: number) {
 }
 
 function sliceBodyGeometry(quality: QualityConfig) {
-  const geometry = new T.SphereGeometry(1, quality.mobile ? 32 : quality.tier === 'high' ? 54 : 44, quality.mobile ? 22 : quality.tier === 'high' ? 34 : 28)
-  const position = geometry.attributes.position as T.BufferAttribute
-  for (let index = 0; index < position.count; index += 1) {
-    const x = position.getX(index)
-    const y = position.getY(index)
-    const z = position.getZ(index)
-    const crown = Math.max(0, y)
-    const handmade = Math.sin(z * 4.6 + y * 3.2) * 0.014 + Math.sin(z * 10.4 - y * 4.1) * 0.004
-    position.setY(index, y + crown * handmade - Math.max(0, -y) * 0.012)
-    position.setZ(index, z * (1 + crown * 0.024))
-    position.setX(index, x * (1 - crown * 0.025))
-  }
-  position.needsUpdate = true
+  const depth = quality.mobile ? 0.132 : 0.15
+  const geometry = new T.ExtrudeGeometry(crumbFaceShape(), {
+    depth,
+    steps: 1,
+    curveSegments: quality.mobile ? 14 : quality.tier === 'high' ? 26 : 20,
+    bevelEnabled: true,
+    bevelSegments: quality.mobile ? 2 : 3,
+    bevelSize: 0.018,
+    bevelThickness: 0.014,
+  })
+  geometry.rotateY(Math.PI / 2)
+  geometry.translate(-depth * 0.5, 0, 0)
   geometry.computeVertexNormals()
   return geometry
 }
 
 function addPores(parent: T.Object3D, pores: readonly CrumbPore[], baseX: number, materials: { edge: T.Material; cavity: T.Material }) {
-  const sizes = [0.038, 0.027, 0.016]
+  const sizes = [0.042, 0.029, 0.018]
   pores.forEach(([y, z, tier, twist], index) => {
     const radius = sizes[tier] * (0.9 + (index % 3) * 0.07)
     const geometry = irregularPoreGeometry(index + tier * 7)
@@ -1359,30 +1363,41 @@ function addPores(parent: T.Object3D, pores: readonly CrumbPore[], baseX: number
 function breadCutDetails(quality: QualityConfig) {
   const group = new T.Group()
   group.name = 'bread-cut-reveal'
-  const crumbMaterial = mat(0xffedc9, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.012 })
-  const crustMaterial = mat(0xa86529, quality, 'crust', { roughness: 0.9, bumpScale: 0.021 })
-  const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf4d9a6, roughness: 1, metalness: 0, transparent: true, opacity: 0.42, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
-  const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xbd8750, roughness: 1, metalness: 0, transparent: true, opacity: 0.48, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+  const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022 })
+  const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021 })
+  const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf5d9a2, roughness: 1, metalness: 0, transparent: true, opacity: 0.28, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+  const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xc99a65, roughness: 1, metalness: 0, transparent: true, opacity: 0.25, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
   const mainCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, group, 0.806, 0.43, 0)
   mainCrustFace.rotation.y = Math.PI / 2
   const mainFace = mesh(crumbFaceGeometry(MAIN_CRUMB_PORES), crumbMaterial, group, 0.821, 0.43, 0)
   mainFace.rotation.y = Math.PI / 2
-  mainFace.scale.set(0.91, 0.94, 0.905)
+  // Keep a restrained crust lip around the crumb instead of the old thick
+  // decal-like ring. Both faces use the same profile, so the cut reads as one
+  // continuous end cap.
+  mainFace.scale.set(0.958, 0.978, 0.955)
 
   const slice = new T.Group()
   slice.name = 'separated-slice'
   const sliceBody = mesh(sliceBodyGeometry(quality), crustMaterial, slice)
-  sliceBody.scale.set(0.145, 0.44, 0.57)
-  const sliceCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, slice, 0.149, 0, 0)
+  sliceBody.scale.set(1, 1.06, 1.12)
+  const sliceCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, slice, 0.079, 0, 0)
   sliceCrustFace.rotation.y = Math.PI / 2
-  const sliceFace = mesh(crumbFaceGeometry(SLICE_CRUMB_PORES), crumbMaterial, slice, 0.151, 0, 0)
+  const sliceFace = mesh(crumbFaceGeometry(SLICE_CRUMB_PORES), crumbMaterial, slice, 0.083, 0, 0)
   sliceFace.rotation.y = Math.PI / 2
-  sliceFace.scale.set(0.905, 0.94, 0.9)
-  slice.position.set(0.88, 0.44, 0)
+  sliceFace.scale.set(0.955, 0.978, 0.95)
+  // The camera approaches from +z/+x. A small yaw turns the cut plane toward
+  // it, keeping the slice legible without presenting a thick crust edge.
+  slice.scale.set(0.86, 0.9, 0.86)
+  slice.rotation.y = -0.28
+  // Keep the shared profile just in front of the loaf's cut plane so the
+  // crumb face cannot be occluded by the still-visible main end cap during
+  // the first knife-contact frames. The lower y anchor puts the body on the
+  // board with the new extruded profile.
+  slice.position.set(0.94, 0.35, 0)
   group.add(slice)
 
   addPores(group, MAIN_CRUMB_PORES, 0.824, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
-  addPores(slice, SLICE_CRUMB_PORES, 0.154, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
+  addPores(slice, SLICE_CRUMB_PORES, 0.086, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
 
   const crumbs = Array.from({ length: 8 }, (_, index) => {
     const size = 0.014 + random() * 0.019
@@ -1807,7 +1822,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       knife.rotation.set(knifeRotation.x, knifeRotation.y, knifeRotation.z)
       visibility.knife.set(overlap(p, 0.965, 1, 0.007))
       visibility.cut.set(cutReveal)
-      cutDetails.slice.position.set(0.88 + sliceSeparate * 0.32, 0.44 - sliceSeparate * 0.035, sliceSeparate * 0.045)
+      cutDetails.slice.position.set(0.94 + sliceSeparate * 0.24, 0.35 - sliceSeparate * 0.018, sliceSeparate * 0.045)
       cutDetails.slice.rotation.z = -sliceSeparate * 0.1
       cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)

@@ -278,7 +278,7 @@ function createSurface(kind: SurfaceKind, quality: QualityConfig) {
     flour: ['#fffaf0', '#808080', '#f2f2f2'],
     grain: ['#f0ce82', '#808080', '#e4e4e4'],
     dough: ['#fff0d2', '#808080', '#d7d7d7'],
-    crust: ['#d79a53', '#808080', '#dedede'],
+    crust: ['#c98d4b', '#808080', '#dedede'],
     crumb: ['#f7dfaf', '#808080', '#eeeeee'],
   }[kind]
   const albedo = makeCanvas(size, bases[0])
