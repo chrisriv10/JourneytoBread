@@ -1538,7 +1538,7 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // Thin cut edge: plain matte crust matched to the loaf's shaded crust so
   // extrude-wall UV stretching and facet banding cannot stripe it. Lids keep
   // the full textured materials.
-  const crustEdgeMaterial = mat(0x9e6a38, quality, undefined, { roughness: 0.95, transparent: false, opacity: 1, side: T.DoubleSide })
+  const crustEdgeMaterial = mat(0xb0824a, quality, undefined, { roughness: 0.95, transparent: false, opacity: 1, side: T.DoubleSide })
   // Cut-face lids use a plain unmapped crumb: the shared canvas texture's
   // baked blotches read as large brown stains at cap scale. Pore decals
   // carry all interior detail deliberately.
@@ -1576,12 +1576,16 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   const crumbs = Array.from({ length: 8 }, (_, index) => {
     const size = 0.014 + random() * 0.019
     const crumbGeometry = index % 3 === 0 ? new T.TetrahedronGeometry(size, 0) : new T.IcosahedronGeometry(size, 0)
-    const crumb = mesh(crumbGeometry, crumbMaterial, group)
+    // Plain cap-colored crumbs scattered to the SIDES of the cut: crumbs
+    // landing in front of the face footprint used to read as brown stains
+    // on the crumb itself.
+    const crumb = mesh(crumbGeometry, crumbCapMaterial, group)
+    const side = random() < 0.5 ? -1 : 1
     return {
       crumb,
       delay: index / 11 + random() * 0.12,
-      x: 0.72 + random() * 0.2,
-      z: (random() - 0.5) * 0.55,
+      x: 0.74 + random() * 0.22,
+      z: side * (0.4 + random() * 0.32),
       stretch: 0.68 + random() * 0.72,
       drift: (random() - 0.5) * 0.12,
     }
