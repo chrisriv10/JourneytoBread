@@ -1430,7 +1430,7 @@ function breadCutDetails(quality: QualityConfig) {
     // group keeps it attached to the actual blade position during the cut.
     mainCut.position.x = plane - BAKED_CUT_END_X
   }
-  return { group, slice, crumbs, setCutPlane }
+  return { group, mainCut, slice, crumbs, setCutPlane }
 }
 
 function contactShadow(parent: T.Object3D, width: number, depth: number) {
@@ -1536,7 +1536,9 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
 
   const dough = new DoughMorph(group, quality)
   const cutDetails = breadCutDetails(quality)
-  cutDetails.group.visible = false
+  // Keep the parent alive so the cap and separated slice can be revealed
+  // independently without fading solid geometry over the loaf.
+  cutDetails.group.visible = true
   dough.mesh.add(cutDetails.group)
   const doughShadow = contactShadow(group, 2.22, 1.5)
   const spoon = new T.Group()
@@ -1617,7 +1619,8 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
     additions: new Visibility(additions), clumps: new Visibility(mixtureClumps), basket: new Visibility(basket),
     oven: new Visibility(ovenModel.group), peel: new Visibility(peel),
     final: new Visibility(finalBoard), knife: new Visibility(knife),
-    cut: new Visibility(cutDetails.group),
+    cut: new Visibility(cutDetails.mainCut),
+    slice: new Visibility(cutDetails.slice),
   }
   const kernelHome = new T.Vector3(-0.155, 1.98, 0.26)
   const kernelFocus = new T.Vector3(0, 1.5, 0.65)
@@ -1835,7 +1838,10 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       // Wait for the persistent loaf to finish flattening into its cut plane
       // before revealing the matching slice. This prevents a temporary second
       // silhouette from appearing while the loaf is still changing shape.
-      const cutReveal = windowProgress(p, 0.994, 0.999)
+      // The exposed crumb cap is a solid surface, not a translucent overlay.
+      // Reveal it once the blade has cleared the plane to avoid the gray ghost
+      // produced by fading it over the still-visible crust.
+      const cutReveal = p >= 0.9985 ? 1 : 0
       const sliceSeparate = windowProgress(p, 0.998, 1)
       const cutPlane = bakedCutPlane(p)
       sampleVectorSplineKeyframes(p, knifePositionKeys, knifePosition)
@@ -1844,6 +1850,10 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       knife.rotation.set(knifeRotation.x, knifeRotation.y, knifeRotation.z)
       visibility.knife.set(overlap(p, 0.965, 1, 0.007))
       visibility.cut.set(cutReveal)
+      // Do not crossfade a solid slice through the loaf. It becomes opaque
+      // only after the blade has cleared the cut plane, eliminating the gray
+      // transparency flash during the contact beat.
+      visibility.slice.set(p >= 0.9988 ? 1 : 0)
       cutDetails.setCutPlane(cutPlane)
       // Keep the cut piece just beyond the blade plane, then carry it outward
       // after contact so the camera can read the matching face clearly.
