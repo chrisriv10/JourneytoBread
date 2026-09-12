@@ -357,6 +357,12 @@ class DoughMorph {
     const height = 0.08 + mixing * 0.56 + proof * 0.2 + spring * 0.12
     const depth = 0.69 + mixing * 0.045 + proof * 0.06 - baking * 0.018
     const stirAngle = windowProgress(p, 0.492, 0.565, (t) => t) * Math.PI * 5
+    // Vessel fit: gather the loaf laterally while it must fit the banneton,
+    // peel, and oven mouth; released as oven spring inside the dark oven.
+    const vesselFit = windowProgress(p, 0.67, 0.72) * (1 - windowProgress(p, 0.82, 0.93))
+    const kerfTravel = windowProgress(p, 0.989, 0.996)
+    const kerfFade = 1 - windowProgress(p, 0.9965, 0.9985)
+    const kerfTipY = T.MathUtils.lerp(1.05, 0.68, windowProgress(p, 0.989, 0.997))
     for (let i = 0; i < this.position.count; i += 1) {
       const x = this.original[i * 3]
       const y = this.original[i * 3 + 1]
@@ -394,6 +400,9 @@ class DoughMorph {
       pz = pz * shoulder
         + spring * crown * (0.045 * Math.max(0, z) - 0.03 * Math.max(0, -z))
         + spring * 0.04 * Math.sin(x * 1.7 + 0.4)
+      const vesselGather = 1 - vesselFit * 0.35
+      px *= vesselGather
+      pz *= vesselGather
       const crownShape = baking * crown * (0.018 + 0.016 * Math.exp(-((x + 0.08) ** 2 + (z - 0.04) ** 2) / 0.36))
       const baseSettle = baking * Math.max(0, 0.18 - py) * 0.38
     py += spring * crown * (0.02 * Math.sin(x * 4.4 + 0.7) + 0.012 * Math.sin(x * 7.9 - z * 2.2) + x * 0.014) + crownShape - baseSettle
@@ -432,6 +441,12 @@ class DoughMorph {
         + Math.exp(-((x + 0.15) ** 2 + (z + 0.33) ** 2) / 0.014) * 0.008
       )
       py += crown * baking * (irregular * 0.0055 + blister * 0.008) + bakeBlister
+      // Knife kerf: while the blade travels, press a narrow dent into the
+      // crust ahead of the cut plane. The clipped-away side carries it off at
+      // the handoff; the kept side stays pristine for the cap.
+      const kerfCut = clamp01((py - kerfTipY) / 0.1)
+        * Math.exp(-Math.pow((px - 0.8) / 0.06, 2)) * kerfTravel * kerfFade
+      py -= kerfCut * 0.07
       this.position.setXYZ(i, px, Math.max(0, py), pz)
 
       this.color.copy(this.pale).lerp(this.wet, mixing * (0.72 - shaping * 0.25))
@@ -446,6 +461,7 @@ class DoughMorph {
       this.color.lerp(this.cut, groove * baking * 0.72)
       this.color.lerp(this.toasted, scoreCore * baking * 0.26)
       this.color.lerp(this.raised, scoreEdge * baking * 0.82)
+      this.color.lerp(this.toasted, kerfCut * baking * 0.5)
       this.color.lerp(this.toasted, baking * Math.min(1, bakeBlister * 90) * 0.1)
       const flour = Math.max(0, Math.sin(px * 12 + pz * 7) * Math.sin(pz * 18 - px * 3.5) - 0.34)
       this.color.lerp(this.pale, flour * crownAmount * baking * (1 - groove) * 0.4)
@@ -1459,6 +1475,9 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // below are the only transparent surfaces, and their opacity never changes.
   const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022, transparent: false, opacity: 1 })
   const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021, transparent: false, opacity: 1 })
+  // Thin cut edge: plain matte crust so extrude-wall UV stretching and facet
+  // banding cannot stripe it. Lids keep the full textured materials.
+  const crustEdgeMaterial = mat(0xb57e42, quality, undefined, { roughness: 0.92, transparent: false, opacity: 1 })
   const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf5d9a2, roughness: 1, metalness: 0, transparent: true, opacity: 0.28, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xc99a65, roughness: 1, metalness: 0, transparent: true, opacity: 0.25, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
   // Both cap layers derive from the sampled loaf cross-section: full-contour
@@ -1466,7 +1485,7 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // thickness rather than a decal outline.
   mesh(capGeometry(cut, 0, BAKED_CUT_X, null), crustMaterial, mainCut)
   const mainPores = sampleContourPores(4242, cut, 8)
-  const mainFace = mesh(capGeometry(cut, 0.04, BAKED_CUT_X + 0.0008, mainPores), crumbMaterial, mainCut)
+  const mainFace = mesh(capGeometry(cut, 0.02, BAKED_CUT_X + 0.0008, mainPores), crumbMaterial, mainCut)
   mainCut.visible = false
 
   const slice = new T.Group()
@@ -1478,7 +1497,7 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   sliceGeometry.rotateY(Math.PI / 2)
   sliceGeometry.translate(BAKED_CUT_X, 0, 0)
   sliceGeometry.computeVertexNormals()
-  const sliceBody = new T.Mesh(sliceGeometry, [crumbMaterial, crustMaterial])
+  const sliceBody = new T.Mesh(sliceGeometry, [crumbMaterial, crustEdgeMaterial])
   sliceBody.castShadow = true
   sliceBody.receiveShadow = true
   slice.add(sliceBody)
