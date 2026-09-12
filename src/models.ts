@@ -327,6 +327,19 @@ class DoughMorph {
       const t = span > 0 ? T.MathUtils.clamp(local / span, 0, 1) : 0
       contour.push({ y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t })
     }
+    // The band holds vertices from adjacent sphere rings at slightly different
+    // radii; raw angular resampling would zigzag between rings and stripe the
+    // slice walls. Two gentle circular smoothing passes remove the quantization
+    // ripple while leaving the broad baked curvature untouched.
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (let k = 0; k < samples; k += 1) {
+        const prev = contour[(k - 1 + samples) % samples]
+        const next = contour[(k + 1) % samples]
+        const point = contour[k]
+        point.y += ((prev.y + next.y) * 0.5 - point.y) * 0.5
+        point.z += ((prev.z + next.z) * 0.5 - point.z) * 0.5
+      }
+    }
     return { contour, centroid: { y: cy, z: cz } }
   }
 
@@ -1389,9 +1402,9 @@ function sampleContourPores(seed: number, cut: CutContour, count: number): Crumb
     guard += 1
     let y: number
     let z: number
-    if (clusters.length > 0 && rand() < 0.6) {
+    if (clusters.length > 0 && rand() < 0.3) {
       const cluster = clusters[Math.floor(rand() * clusters.length)]
-      const spread = 0.16
+      const spread = 0.24
       y = cluster.y + ((rand() + rand() + rand()) / 3 - 0.5) * 2 * spread
       z = cluster.z + ((rand() + rand() + rand()) / 3 - 0.5) * 2 * spread
     } else {
@@ -1399,7 +1412,7 @@ function sampleContourPores(seed: number, cut: CutContour, count: number): Crumb
       z = minZ + rand() * (maxZ - minZ)
     }
     if (!insideContour(y, z, cut.contour)) continue
-    const tier = rand() < 0.22 ? 0 : rand() < 0.6 ? 1 : 2
+    const tier = rand() < 0.45 ? 1 : 2
     pores.push([y, z, tier, (rand() - 0.5) * 1.2])
   }
   while (pores.length < count) pores.push([cut.centroid.y, cut.centroid.z, 1, 0])
@@ -1408,24 +1421,71 @@ function sampleContourPores(seed: number, cut: CutContour, count: number): Crumb
 
 function capGeometry(cut: CutContour, erode: number, planeX: number, pores: readonly CrumbPore[] | null) {
   const geometry = new T.ShapeGeometry(contourShape(erode > 0 ? erodeContour(cut.contour, cut.centroid, erode) : cut.contour))
-  if (pores) {
+  {
     const position = geometry.attributes.position as T.BufferAttribute
     for (let index = 0; index < position.count; index += 1) {
       const localY = position.getY(index)
       const localZ = -position.getX(index)
       let cavity = 0
-      pores.forEach(([y, z, tier]) => {
-        const radius = [0.058, 0.041, 0.025][tier]
-        cavity = Math.max(cavity, Math.exp(-(((localY - y) / radius) ** 2 + ((localZ - z) / (radius * 1.35)) ** 2)))
-      })
+      if (pores) {
+        pores.forEach(([y, z, tier]) => {
+          const radius = [0.058, 0.041, 0.025][tier]
+          cavity = Math.max(cavity, Math.exp(-(((localY - y) / radius) ** 2 + ((localZ - z) / (radius * 1.35)) ** 2)))
+        })
+      }
+      // Gentle broad relief always; pore cavities only when pores are passed.
       const broad = Math.sin(localZ * 14.5 + localY * 7.2) * 0.0022 + Math.cos(localY * 19 - localZ * 5) * 0.0013
-      position.setZ(index, broad - cavity * 0.009)
+      position.setZ(index, broad - cavity * 0.006)
     }
     position.needsUpdate = true
   }
   geometry.rotateY(Math.PI / 2)
   geometry.translate(planeX, 0, 0)
   geometry.computeVertexNormals()
+  return geometry
+}
+
+function sliceWallGeometry(cut: CutContour, x0: number, x1: number) {
+  const contour = cut.contour
+  const count = contour.length
+  const positions = new Float32Array((count + 1) * 2 * 3)
+  const normals = new Float32Array((count + 1) * 2 * 3)
+  const index: number[] = []
+  for (let i = 0; i <= count; i += 1) {
+    const point = contour[i % count]
+    const prev = contour[(i - 1 + count) % count]
+    const next = contour[(i + 1) % count]
+    let ny = -(next.z - prev.z)
+    let nz = next.y - prev.y
+    const length = Math.hypot(ny, nz) || 1
+    ny /= length
+    nz /= length
+    if (ny * (point.y - cut.centroid.y) + nz * (point.z - cut.centroid.z) < 0) {
+      ny = -ny
+      nz = -nz
+    }
+    const o = i * 6
+    positions[o] = x0
+    positions[o + 1] = point.y
+    positions[o + 2] = point.z
+    positions[o + 3] = x1
+    positions[o + 4] = point.y
+    positions[o + 5] = point.z
+    normals[o] = 0
+    normals[o + 1] = ny
+    normals[o + 2] = nz
+    normals[o + 3] = 0
+    normals[o + 4] = ny
+    normals[o + 5] = nz
+    if (i < count) {
+      const a = i * 2
+      index.push(a, a + 2, a + 1, a + 1, a + 2, a + 3)
+    }
+  }
+  const geometry = new T.BufferGeometry()
+  geometry.setAttribute('position', new T.BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new T.BufferAttribute(normals, 3))
+  geometry.setIndex(index)
   return geometry
 }
 
@@ -1475,33 +1535,38 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // below are the only transparent surfaces, and their opacity never changes.
   const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022, transparent: false, opacity: 1 })
   const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021, transparent: false, opacity: 1 })
-  // Thin cut edge: plain matte crust so extrude-wall UV stretching and facet
-  // banding cannot stripe it. Lids keep the full textured materials.
-  const crustEdgeMaterial = mat(0xb57e42, quality, undefined, { roughness: 0.92, transparent: false, opacity: 1 })
-  const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf5d9a2, roughness: 1, metalness: 0, transparent: true, opacity: 0.28, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
-  const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xc99a65, roughness: 1, metalness: 0, transparent: true, opacity: 0.25, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+  // Thin cut edge: plain matte crust matched to the loaf's shaded crust so
+  // extrude-wall UV stretching and facet banding cannot stripe it. Lids keep
+  // the full textured materials.
+  const crustEdgeMaterial = mat(0x9e6a38, quality, undefined, { roughness: 0.95, transparent: false, opacity: 1, side: T.DoubleSide })
+  // Cut-face lids use a plain unmapped crumb: the shared canvas texture's
+  // baked blotches read as large brown stains at cap scale. Pore decals
+  // carry all interior detail deliberately.
+  const crumbCapMaterial = new T.MeshStandardMaterial({ color: 0xffe8bd, roughness: 0.97, metalness: 0, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, transparent: false, opacity: 1 })
+  const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf5d9a2, roughness: 1, metalness: 0, transparent: true, opacity: 0.2, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+  const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xd0a878, roughness: 1, metalness: 0, transparent: true, opacity: 0.18, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
   // Both cap layers derive from the sampled loaf cross-section: full-contour
   // crust with a slightly eroded crumb face, so the rim reads as real crust
   // thickness rather than a decal outline.
   mesh(capGeometry(cut, 0, BAKED_CUT_X, null), crustMaterial, mainCut)
   const mainPores = sampleContourPores(4242, cut, 8)
-  const mainFace = mesh(capGeometry(cut, 0.02, BAKED_CUT_X + 0.0008, mainPores), crumbMaterial, mainCut)
+  const mainFace = mesh(capGeometry(cut, 0.02, BAKED_CUT_X + 0.0008, null), crumbCapMaterial, mainCut)
   mainCut.visible = false
 
   const slice = new T.Group()
   slice.name = 'separated-slice'
-  // The slice is the same canonical contour extruded: back lid lands exactly
-  // on the loaf cut plane, so pre-separation it fits back like the missing
-  // piece. No profile scaling, no yaw compensation. Pose-only animation after.
-  const sliceGeometry = new T.ExtrudeGeometry(contourShape(cut.contour), { depth: BAKED_SLICE_THICKNESS, steps: 1, bevelEnabled: false })
-  sliceGeometry.rotateY(Math.PI / 2)
-  sliceGeometry.translate(BAKED_CUT_X, 0, 0)
-  sliceGeometry.computeVertexNormals()
-  const sliceBody = new T.Mesh(sliceGeometry, [crumbMaterial, crustEdgeMaterial])
-  sliceBody.castShadow = true
-  sliceBody.receiveShadow = true
-  slice.add(sliceBody)
+  // The slice is the same canonical contour: back lid lands exactly on the
+  // loaf cut plane, so pre-separation it fits back like the missing piece.
+  // No profile scaling, no yaw compensation. Pose-only animation after.
+  // Walls are a custom smooth-shaded strip (analytic outward normals, no UVs),
+  // so neither flat-facet banding nor texture stretching can stripe the edge.
   const slicePores = sampleContourPores(4343, cut, 7)
+  mesh(capGeometry(cut, 0, BAKED_CUT_X + BAKED_SLICE_THICKNESS, null), crumbCapMaterial, slice)
+  mesh(capGeometry(cut, 0, BAKED_CUT_X, null), crumbCapMaterial, slice)
+  const sliceWalls = new T.Mesh(sliceWallGeometry(cut, BAKED_CUT_X, BAKED_CUT_X + BAKED_SLICE_THICKNESS), crustEdgeMaterial)
+  sliceWalls.castShadow = true
+  sliceWalls.receiveShadow = true
+  slice.add(sliceWalls)
   addPores(slice, slicePores, BAKED_CUT_X + BAKED_SLICE_THICKNESS + 0.0015, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
   slice.visible = false
   group.add(slice)
@@ -1630,7 +1695,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   // deformation once, sample the cross-section ring at the cut plane, and
   // build the cap and slice from that contour. No hand-authored profile.
   dough.apply(1)
-  const cutDetails = breadCutDetails(quality, dough.sampleCutContour(BAKED_CUT_X))
+  const cutDetails = breadCutDetails(quality, dough.sampleCutContour(BAKED_CUT_X, 144))
   // Keep the parent alive so the cap and separated slice can be revealed
   // independently without fading solid geometry over the loaf.
   cutDetails.group.visible = true
