@@ -444,6 +444,13 @@ class DoughMorph {
       scoreCore *= scoring
       scoreEdge *= scoring
       scoreLip *= scoring
+      // Scores stop before the slice: fade the whole score system out
+      // approaching the cut plane so dark groove mouths never crowd the seam.
+      const seamFade = 1 - windowProgress(px, 0.55, 0.7)
+      groove *= seamFade
+      scoreCore *= seamFade
+      scoreEdge *= seamFade
+      scoreLip *= seamFade
       py -= groove * (0.028 + spring * 0.061)
       py += scoreLip * (0.007 + spring * 0.014)
       const irregular = Math.sin(px * 21 + pz * 13) * Math.sin(pz * 31 - px * 9)
@@ -1356,11 +1363,34 @@ function contourShape(contour: { y: number; z: number }[]) {
   return shape
 }
 
-function erodeContour(contour: { y: number; z: number }[], centroid: { y: number; z: number }, amount: number) {
-  return contour.map((point) => ({
-    y: centroid.y + (point.y - centroid.y) * (1 - amount),
-    z: centroid.z + (point.z - centroid.z) * (1 - amount),
+// Uniform similarity scaling about the centroid: topologically safe (a scaled
+// simple polygon can never self-intersect), unlike normal-offset erosion.
+function rimContour(cut: CutContour) {
+  return cut.contour.map((point) => ({
+    y: cut.centroid.y + (point.y - cut.centroid.y) * 1.01,
+    z: cut.centroid.z + (point.z - cut.centroid.z) * 1.01,
   }))
+}
+
+function contourNormalsFor(contour: { y: number; z: number }[], centroid: { y: number; z: number }) {
+  const count = contour.length
+  const normals: { y: number; z: number }[] = []
+  for (let i = 0; i < count; i += 1) {
+    const prev = contour[(i - 1 + count) % count]
+    const next = contour[(i + 1) % count]
+    let ny = -(next.z - prev.z)
+    let nz = next.y - prev.y
+    const length = Math.hypot(ny, nz) || 1
+    ny /= length
+    nz /= length
+    const point = contour[i]
+    if (ny * (point.y - centroid.y) + nz * (point.z - centroid.z) < 0) {
+      ny = -ny
+      nz = -nz
+    }
+    normals.push({ y: ny, z: nz })
+  }
+  return normals
 }
 
 function insideContour(y: number, z: number, contour: { y: number; z: number }[]) {
@@ -1419,8 +1449,8 @@ function sampleContourPores(seed: number, cut: CutContour, count: number): Crumb
   return pores
 }
 
-function capGeometry(cut: CutContour, erode: number, planeX: number, pores: readonly CrumbPore[] | null) {
-  const geometry = new T.ShapeGeometry(contourShape(erode > 0 ? erodeContour(cut.contour, cut.centroid, erode) : cut.contour))
+function capGeometry(cut: CutContour, shape: T.Shape, planeX: number, pores: readonly CrumbPore[] | null) {
+  const geometry = new T.ShapeGeometry(shape)
   {
     const position = geometry.attributes.position as T.BufferAttribute
     for (let index = 0; index < position.count; index += 1) {
@@ -1448,22 +1478,15 @@ function capGeometry(cut: CutContour, erode: number, planeX: number, pores: read
 function sliceWallGeometry(cut: CutContour, x0: number, x1: number) {
   const contour = cut.contour
   const count = contour.length
+  const contourNormals = contourNormalsFor(contour, cut.centroid)
   const positions = new Float32Array((count + 1) * 2 * 3)
-  const normals = new Float32Array((count + 1) * 2 * 3)
+  const normalData = new Float32Array((count + 1) * 2 * 3)
   const index: number[] = []
   for (let i = 0; i <= count; i += 1) {
     const point = contour[i % count]
-    const prev = contour[(i - 1 + count) % count]
-    const next = contour[(i + 1) % count]
-    let ny = -(next.z - prev.z)
-    let nz = next.y - prev.y
-    const length = Math.hypot(ny, nz) || 1
-    ny /= length
-    nz /= length
-    if (ny * (point.y - cut.centroid.y) + nz * (point.z - cut.centroid.z) < 0) {
-      ny = -ny
-      nz = -nz
-    }
+    const outward = contourNormals[i % count]
+    const ny = outward.y
+    const nz = outward.z
     const o = i * 6
     positions[o] = x0
     positions[o + 1] = point.y
@@ -1471,12 +1494,12 @@ function sliceWallGeometry(cut: CutContour, x0: number, x1: number) {
     positions[o + 3] = x1
     positions[o + 4] = point.y
     positions[o + 5] = point.z
-    normals[o] = 0
-    normals[o + 1] = ny
-    normals[o + 2] = nz
-    normals[o + 3] = 0
-    normals[o + 4] = ny
-    normals[o + 5] = nz
+    normalData[o] = 0
+    normalData[o + 1] = ny
+    normalData[o + 2] = nz
+    normalData[o + 3] = 0
+    normalData[o + 4] = ny
+    normalData[o + 5] = nz
     if (i < count) {
       const a = i * 2
       index.push(a, a + 2, a + 1, a + 1, a + 2, a + 3)
@@ -1484,7 +1507,7 @@ function sliceWallGeometry(cut: CutContour, x0: number, x1: number) {
   }
   const geometry = new T.BufferGeometry()
   geometry.setAttribute('position', new T.BufferAttribute(positions, 3))
-  geometry.setAttribute('normal', new T.BufferAttribute(normals, 3))
+  geometry.setAttribute('normal', new T.BufferAttribute(normalData, 3))
   geometry.setIndex(index)
   return geometry
 }
@@ -1538,7 +1561,7 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // Thin cut edge: plain matte crust matched to the loaf's shaded crust so
   // extrude-wall UV stretching and facet banding cannot stripe it. Lids keep
   // the full textured materials.
-  const crustEdgeMaterial = mat(0xb0824a, quality, undefined, { roughness: 0.95, transparent: false, opacity: 1, side: T.DoubleSide })
+  const crustEdgeMaterial = mat(0x96612f, quality, undefined, { roughness: 0.95, transparent: false, opacity: 1, side: T.DoubleSide })
   // Cut-face lids use a plain unmapped crumb: the shared canvas texture's
   // baked blotches read as large brown stains at cap scale. Pore decals
   // carry all interior detail deliberately.
@@ -1548,9 +1571,9 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // Both cap layers derive from the sampled loaf cross-section: full-contour
   // crust with a slightly eroded crumb face, so the rim reads as real crust
   // thickness rather than a decal outline.
-  mesh(capGeometry(cut, 0, BAKED_CUT_X, null), crustMaterial, mainCut)
+  mesh(capGeometry(cut, contourShape(rimContour(cut)), BAKED_CUT_X - 0.0008, null), crustMaterial, mainCut)
   const mainPores = sampleContourPores(4242, cut, 8)
-  const mainFace = mesh(capGeometry(cut, 0.02, BAKED_CUT_X + 0.0008, null), crumbCapMaterial, mainCut)
+  const mainFace = mesh(capGeometry(cut, contourShape(cut.contour), BAKED_CUT_X + 0.0008, null), crumbCapMaterial, mainCut)
   mainCut.visible = false
 
   const slice = new T.Group()
@@ -1561,8 +1584,8 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // Walls are a custom smooth-shaded strip (analytic outward normals, no UVs),
   // so neither flat-facet banding nor texture stretching can stripe the edge.
   const slicePores = sampleContourPores(4343, cut, 7)
-  mesh(capGeometry(cut, 0, BAKED_CUT_X + BAKED_SLICE_THICKNESS, null), crumbCapMaterial, slice)
-  mesh(capGeometry(cut, 0, BAKED_CUT_X, null), crumbCapMaterial, slice)
+  mesh(capGeometry(cut, contourShape(cut.contour), BAKED_CUT_X + BAKED_SLICE_THICKNESS, null), crumbCapMaterial, slice)
+  mesh(capGeometry(cut, contourShape(cut.contour), BAKED_CUT_X, null), crumbCapMaterial, slice)
   const sliceWalls = new T.Mesh(sliceWallGeometry(cut, BAKED_CUT_X, BAKED_CUT_X + BAKED_SLICE_THICKNESS), crustEdgeMaterial)
   sliceWalls.castShadow = true
   sliceWalls.receiveShadow = true
