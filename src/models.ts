@@ -59,6 +59,13 @@ const SCORE_SPECS = [
   { center: 0.5, width: 0.87, depth: 0.8, curve: -0.011, angle: 0.44, length: 0.82, lip: 0.62 },
 ] as const
 
+const BAKED_CUT_START_X = 1.38
+const BAKED_CUT_END_X = 0.72
+
+function bakedCutPlane(progress: number) {
+  return T.MathUtils.lerp(BAKED_CUT_START_X, BAKED_CUT_END_X, windowProgress(progress, 0.989, 0.998))
+}
+
 function createRandom(initial: number) {
   let seed = initial
   return () => {
@@ -302,9 +309,7 @@ class DoughMorph {
       this.mesh.material.needsUpdate = true
       this.showingCrustSurface = useCrustSurface
     }
-    // Stop just shy of a mathematically flat collapse; the crumb face covers the
-    // remaining cap while avoiding degenerate triangles in the persistent loaf.
-    const sliceCut = windowProgress(p, 0.989, 0.998) * 0.9
+    const cutPlane = bakedCutPlane(p)
     const width = 0.8 + mixing * 0.12 + shaping * 0.2 + proof * 0.18 + spring * 0.14
     const height = 0.08 + mixing * 0.56 + proof * 0.2 + spring * 0.12
     const depth = 0.69 + mixing * 0.045 + proof * 0.06 - baking * 0.018
@@ -349,7 +354,10 @@ class DoughMorph {
       const crownShape = baking * crown * (0.018 + 0.016 * Math.exp(-((x + 0.08) ** 2 + (z - 0.04) ** 2) / 0.36))
       const baseSettle = baking * Math.max(0, 0.18 - py) * 0.38
       py += spring * crown * (0.02 * Math.sin(x * 4.4 + 0.7) + 0.012 * Math.sin(x * 7.9 - z * 2.2) + x * 0.014) + crownShape - baseSettle
-      if (px > 0.72) px = T.MathUtils.lerp(px, 0.72, sliceCut)
+      // Remove only the volume beyond the moving blade plane. The previous
+      // lerp pulled every right-side vertex toward the plane, visibly shrinking
+      // the loaf instead of cutting it.
+      if (px > cutPlane) px = cutPlane
       let groove = 0
       let scoreCore = 0
       let scoreEdge = 0
@@ -1365,13 +1373,16 @@ function addPores(parent: T.Object3D, pores: readonly CrumbPore[], baseX: number
 function breadCutDetails(quality: QualityConfig) {
   const group = new T.Group()
   group.name = 'bread-cut-reveal'
+  const mainCut = new T.Group()
+  mainCut.name = 'main-cut-cap'
+  group.add(mainCut)
   const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022 })
   const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021 })
   const poreEdgeMaterial = new T.MeshStandardMaterial({ color: 0xf5d9a2, roughness: 1, metalness: 0, transparent: true, opacity: 0.28, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   const poreCavityMaterial = new T.MeshStandardMaterial({ color: 0xc99a65, roughness: 1, metalness: 0, transparent: true, opacity: 0.25, side: T.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
-  const mainCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, group, 0.806, 0.43, 0)
+  const mainCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, mainCut, 0.806, 0.43, 0)
   mainCrustFace.rotation.y = Math.PI / 2
-  const mainFace = mesh(crumbFaceGeometry(MAIN_CRUMB_PORES), crumbMaterial, group, 0.821, 0.43, 0)
+  const mainFace = mesh(crumbFaceGeometry(MAIN_CRUMB_PORES), crumbMaterial, mainCut, 0.821, 0.43, 0)
   mainFace.rotation.y = Math.PI / 2
   // Keep a restrained crust lip around the crumb instead of the old thick
   // decal-like ring. Both faces use the same profile, so the cut reads as one
@@ -1395,10 +1406,10 @@ function breadCutDetails(quality: QualityConfig) {
   // crumb face cannot be occluded by the still-visible main end cap during
   // the first knife-contact frames. The lower y anchor puts the body on the
   // board with the new extruded profile.
-  slice.position.set(0.82, 0.35, 0)
+  slice.position.set(0.77, 0.35, 0)
   group.add(slice)
 
-  addPores(group, MAIN_CRUMB_PORES, 0.824, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
+  addPores(mainCut, MAIN_CRUMB_PORES, 0.824, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
   addPores(slice, SLICE_CRUMB_PORES, 0.063, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
 
   const crumbs = Array.from({ length: 8 }, (_, index) => {
@@ -1414,7 +1425,12 @@ function breadCutDetails(quality: QualityConfig) {
       drift: (random() - 0.5) * 0.12,
     }
   })
-  return { group, slice, crumbs }
+  const setCutPlane = (plane: number) => {
+    // The cap is authored around the completed plane at x=.72. Moving this
+    // group keeps it attached to the actual blade position during the cut.
+    mainCut.position.x = plane - BAKED_CUT_END_X
+  }
+  return { group, slice, crumbs, setCutPlane }
 }
 
 function contactShadow(parent: T.Object3D, width: number, depth: number) {
@@ -1821,13 +1837,19 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       // silhouette from appearing while the loaf is still changing shape.
       const cutReveal = windowProgress(p, 0.994, 0.999)
       const sliceSeparate = windowProgress(p, 0.998, 1)
+      const cutPlane = bakedCutPlane(p)
       sampleVectorSplineKeyframes(p, knifePositionKeys, knifePosition)
       sampleVectorSplineKeyframes(p, knifeRotationKeys, knifeRotation)
       knife.position.copy(knifePosition)
       knife.rotation.set(knifeRotation.x, knifeRotation.y, knifeRotation.z)
       visibility.knife.set(overlap(p, 0.965, 1, 0.007))
       visibility.cut.set(cutReveal)
-      cutDetails.slice.position.set(0.82 + sliceSeparate * 0.24, 0.35 - sliceSeparate * 0.018, sliceSeparate * 0.045)
+      cutDetails.setCutPlane(cutPlane)
+      // Keep the cut piece just beyond the blade plane, then carry it outward
+      // after contact so the camera can read the matching face clearly.
+      // The cut plane supplies the separation in x; a small z travel gives the
+      // slice depth without carrying it out of the final camera's framing.
+      cutDetails.slice.position.set(cutPlane + 0.22, 0.35 - sliceSeparate * 0.018, sliceSeparate * 0.1)
       cutDetails.slice.rotation.z = -sliceSeparate * 0.1
       cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)
