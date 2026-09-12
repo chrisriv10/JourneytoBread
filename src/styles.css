@@ -305,8 +305,8 @@ button {
 .hud-on-light .hud,
 .hud-on-light .hud__timer,
 .hud-on-light .hud__stage-label {
-  color: rgba(39, 32, 23, 0.76);
-  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.18);
+  color: rgba(35, 28, 20, 0.88);
+  text-shadow: 0 0 12px rgba(255, 250, 235, 0.35), 0 1px 0 rgba(255, 250, 235, 0.25);
 }
 
 .hud-on-light .hud__stage-number,
@@ -314,7 +314,8 @@ button {
 .hud-on-light .sound-toggle,
 .hud-on-light .play-toggle,
 .hud-on-light .hud__scroll-hint {
-  color: rgba(39, 32, 23, 0.52);
+  color: rgba(35, 28, 20, 0.68);
+  text-shadow: 0 0 10px rgba(255, 250, 235, 0.3);
 }
 
 .sound-toggle__bars {
