@@ -304,7 +304,7 @@ class DoughMorph {
     }
     // Stop just shy of a mathematically flat collapse; the crumb face covers the
     // remaining cap while avoiding degenerate triangles in the persistent loaf.
-    const sliceCut = windowProgress(p, 0.989, 0.997) * 0.9
+    const sliceCut = windowProgress(p, 0.989, 0.998) * 0.9
     const width = 0.8 + mixing * 0.12 + shaping * 0.2 + proof * 0.18 + spring * 0.14
     const height = 0.08 + mixing * 0.56 + proof * 0.2 + spring * 0.12
     const depth = 0.69 + mixing * 0.045 + proof * 0.06 - baking * 0.018
@@ -1326,7 +1326,9 @@ function irregularPoreGeometry(seed: number) {
 }
 
 function sliceBodyGeometry(quality: QualityConfig) {
-  const depth = quality.mobile ? 0.132 : 0.15
+  // This is a bread slice, not a second miniature loaf. Keep the extrusion
+  // shallow so the shared cut profile remains the visual subject.
+  const depth = quality.mobile ? 0.084 : 0.098
   const geometry = new T.ExtrudeGeometry(crumbFaceShape(), {
     depth,
     steps: 1,
@@ -1380,24 +1382,24 @@ function breadCutDetails(quality: QualityConfig) {
   slice.name = 'separated-slice'
   const sliceBody = mesh(sliceBodyGeometry(quality), crustMaterial, slice)
   sliceBody.scale.set(1, 1.06, 1.12)
-  const sliceCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, slice, 0.079, 0, 0)
+  const sliceCrustFace = mesh(new T.ShapeGeometry(crumbFaceShape(), 18), crustMaterial, slice, 0.055, 0, 0)
   sliceCrustFace.rotation.y = Math.PI / 2
-  const sliceFace = mesh(crumbFaceGeometry(SLICE_CRUMB_PORES), crumbMaterial, slice, 0.083, 0, 0)
+  const sliceFace = mesh(crumbFaceGeometry(SLICE_CRUMB_PORES), crumbMaterial, slice, 0.059, 0, 0)
   sliceFace.rotation.y = Math.PI / 2
   sliceFace.scale.set(0.955, 0.978, 0.95)
   // The camera approaches from +z/+x. A small yaw turns the cut plane toward
   // it, keeping the slice legible without presenting a thick crust edge.
-  slice.scale.set(0.86, 0.9, 0.86)
+  slice.scale.set(0.88, 0.9, 0.88)
   slice.rotation.y = -0.28
   // Keep the shared profile just in front of the loaf's cut plane so the
   // crumb face cannot be occluded by the still-visible main end cap during
   // the first knife-contact frames. The lower y anchor puts the body on the
   // board with the new extruded profile.
-  slice.position.set(0.94, 0.35, 0)
+  slice.position.set(0.82, 0.35, 0)
   group.add(slice)
 
   addPores(group, MAIN_CRUMB_PORES, 0.824, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
-  addPores(slice, SLICE_CRUMB_PORES, 0.086, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
+  addPores(slice, SLICE_CRUMB_PORES, 0.063, { edge: poreEdgeMaterial, cavity: poreCavityMaterial })
 
   const crumbs = Array.from({ length: 8 }, (_, index) => {
     const size = 0.014 + random() * 0.019
@@ -1814,15 +1816,18 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       if (p >= 0.925) arcPosition(ovenDestination, finalDestination, finish, 0.28 * flourish, dough.mesh.position)
       dough.mesh.rotation.y += finish * -0.12
       const knifeCut = windowProgress(p, 0.989, 0.997)
-      const cutReveal = windowProgress(p, 0.99, 0.997)
-      const sliceSeparate = windowProgress(p, 0.994, 1)
+      // Wait for the persistent loaf to finish flattening into its cut plane
+      // before revealing the matching slice. This prevents a temporary second
+      // silhouette from appearing while the loaf is still changing shape.
+      const cutReveal = windowProgress(p, 0.994, 0.999)
+      const sliceSeparate = windowProgress(p, 0.998, 1)
       sampleVectorSplineKeyframes(p, knifePositionKeys, knifePosition)
       sampleVectorSplineKeyframes(p, knifeRotationKeys, knifeRotation)
       knife.position.copy(knifePosition)
       knife.rotation.set(knifeRotation.x, knifeRotation.y, knifeRotation.z)
       visibility.knife.set(overlap(p, 0.965, 1, 0.007))
       visibility.cut.set(cutReveal)
-      cutDetails.slice.position.set(0.94 + sliceSeparate * 0.24, 0.35 - sliceSeparate * 0.018, sliceSeparate * 0.045)
+      cutDetails.slice.position.set(0.82 + sliceSeparate * 0.24, 0.35 - sliceSeparate * 0.018, sliceSeparate * 0.045)
       cutDetails.slice.rotation.z = -sliceSeparate * 0.1
       cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)
