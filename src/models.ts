@@ -67,6 +67,14 @@ const SCORE_SPECS = [
 
 const BAKED_CUT_X = 0.95
 
+// Oven archway clearance, in world Z. The masonry jamb columns' front face
+// sits at roughly z = -0.75 while the oven is parked (ovenExit doesn't move
+// it until p = 0.95); the loaf must stay laterally gathered until its exit
+// arc has carried it past this face plus a margin. OVEN_CLEARANCE_RANGE sets
+// how far past the face the release takes to complete.
+const OVEN_JAMB_FRONT_Z = -0.75
+const OVEN_CLEARANCE_RANGE = 0.5
+
 function createRandom(initial: number) {
   let seed = initial
   return () => {
@@ -345,7 +353,7 @@ class DoughMorph {
     return { contour, centroid: { y: cy, z: cz } }
   }
 
-  apply(p: number) {
+  apply(p: number, ovenClear = 0) {
     if (p === this.lastProgress) return
     this.lastProgress = p
     const mixing = windowProgress(p, 0.502, 0.575)
@@ -373,8 +381,11 @@ class DoughMorph {
     const depth = 0.69 + mixing * 0.045 + proof * 0.06 - baking * 0.018
     const stirAngle = windowProgress(p, 0.492, 0.565, (t) => t) * Math.PI * 5
     // Vessel fit: gather the loaf laterally while it must fit the banneton,
-    // peel, and oven mouth; released as oven spring inside the dark oven.
-    const vesselFit = windowProgress(p, 0.67, 0.72) * (1 - windowProgress(p, 0.955, 0.978))
+    // peel, and oven mouth. The release is driven by the loaf's actual exit
+    // clearance (ovenClear, derived from its computed Z along the oven→board
+    // arc), not a hardcoded progress window, so it stays correct if the exit
+    // timing or oven geometry ever changes.
+    const vesselFit = windowProgress(p, 0.67, 0.72) * (1 - ovenClear)
     const kerfTravel = windowProgress(p, 0.989, 0.996)
     const kerfFade = 1 - windowProgress(p, 0.9965, 0.9985)
     const kerfTipY = T.MathUtils.lerp(1.05, 0.68, windowProgress(p, 0.989, 0.997))
@@ -1685,7 +1696,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   // Derive the cut profile from the actual baked loaf: evaluate the full
   // deformation once, sample the cross-section ring at the cut plane, and
   // build the cap and slice from that contour. No hand-authored profile.
-  dough.apply(1)
+  dough.apply(1, 1)
   const cutDetails = breadCutDetails(quality, dough.sampleCutContour(BAKED_CUT_X, quality.mobile ? 120 : 216))
   // Keep the parent alive so the cap and separated heel can be revealed
   // independently without fading solid geometry over the loaf.
@@ -1938,7 +1949,17 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       // Topology is shared from the first cohesive mixture through the final loaf.
       const doughOpacity = windowProgress(p, 0.498, 0.538)
       dough.mesh.visible = doughOpacity > 0.002
-      dough.apply(p)
+      // Oven-exit clearance, computed BEFORE deforming: the provisional Z of
+      // the loaf along the oven→board arc decides when the vessel gather may
+      // release. Behind/at the jamb front face ovenClear is 0 (stay narrow);
+      // it reaches 1 while the loaf is still gliding, so no shape change
+      // happens after it has come to rest on the final board.
+      const exitFinish = windowProgress(p, 0.925, 0.972)
+      const doughExitZ = p >= 0.925
+        ? T.MathUtils.lerp(ovenDestination.z, finalDestination.z, exitFinish)
+        : ovenDestination.z
+      const ovenClear = clamp01((doughExitZ - OVEN_JAMB_FRONT_Z) / OVEN_CLEARANCE_RANGE)
+      dough.apply(p, ovenClear)
       dough.mesh.material.opacity = doughOpacity
       dough.mesh.material.depthWrite = dough.mesh.material.opacity > 0.98
       // The heel shares the loaf's baked state through its own material
@@ -2002,11 +2023,10 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         ember.scale.set(coalScale, coalScale * 0.58, coalScale * 0.84)
       })
 
-      const finish = windowProgress(p, 0.925, 0.972)
       finalBoard.position.set(0, 0, 0.48)
       visibility.final.set(windowProgress(p, 0.94, 0.97))
-      if (p >= 0.925) arcPosition(ovenDestination, finalDestination, finish, 0.28 * flourish, dough.mesh.position)
-      dough.mesh.rotation.y += finish * -0.12
+      if (p >= 0.925) arcPosition(ovenDestination, finalDestination, exitFinish, 0.28 * flourish, dough.mesh.position)
+      dough.mesh.rotation.y += exitFinish * -0.12
       const knifeCut = windowProgress(p, 0.975, 0.996)
       // The loaf keeps valid baked topology through the knife travel; the
       // blade motion sells the cut. The eased reveal window opens the clips
@@ -2061,7 +2081,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         crumb.position.set(x + fall * (0.06 + index * 0.006) + drift * fall, 0.62 - fall * (0.55 + (index % 3) * 0.03), z + Math.sin(index * 2.3) * fall * 0.08)
         crumb.rotation.set(fall * index, fall * 2.1, fall * 0.7)
       })
-      const airborne = Math.max(bell(liftOut), bell(basketPlace), bell(intoOven), bell(finish))
+      const airborne = Math.max(bell(liftOut), bell(basketPlace), bell(intoOven), bell(exitFinish))
       const contactStrength = p < 0.808 ? 0.4 : p < 0.925 ? 0.32 : 0.5
       const doughShadowOpacity = windowProgress(p, 0.61, 0.635) * contactStrength * (1 - airborne * 0.9)
       const doughSupportY = p < 0.808
