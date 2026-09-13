@@ -374,7 +374,7 @@ class DoughMorph {
     const stirAngle = windowProgress(p, 0.492, 0.565, (t) => t) * Math.PI * 5
     // Vessel fit: gather the loaf laterally while it must fit the banneton,
     // peel, and oven mouth; released as oven spring inside the dark oven.
-    const vesselFit = windowProgress(p, 0.67, 0.72) * (1 - windowProgress(p, 0.82, 0.93))
+    const vesselFit = windowProgress(p, 0.67, 0.72) * (1 - windowProgress(p, 0.93, 0.965))
     const kerfTravel = windowProgress(p, 0.989, 0.996)
     const kerfFade = 1 - windowProgress(p, 0.9965, 0.9985)
     const kerfTipY = T.MathUtils.lerp(1.05, 0.68, windowProgress(p, 0.989, 0.997))
