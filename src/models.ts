@@ -32,6 +32,9 @@ const temp2 = new T.Vector3()
 const _clipPoint = new T.Vector3()
 const _clipNormal = new T.Vector3()
 const _clipQuat = new T.Quaternion()
+const _heelClipPoint = new T.Vector3()
+const _heelClipNormal = new T.Vector3()
+const _heelClipQuat = new T.Quaternion()
 const CONTACT_EPSILON = 0.003
 
 type SupportSurface = {
@@ -1988,14 +1991,28 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       knife.position.copy(knifePosition)
       knife.rotation.set(knifeRotation.x, knifeRotation.y, knifeRotation.z)
       visibility.knife.set(overlap(p, 0.965, 1, 0.007))
+      // Heel pose is set BEFORE the clip calculation below: heelClip must
+      // track the heel's own separation transform, not just the loaf's.
+      // Y-rotation preserves heights exactly, so grounding cannot break.
+      cutDetails.heel.position.set(heelSeparate * 0.38, 0, heelSeparate * 0.1)
+      cutDetails.heel.rotation.y = heelSeparate * 0.7
       if (cutHandoff) {
         dough.mesh.getWorldQuaternion(_clipQuat)
         _clipNormal.set(-1, 0, 0).applyQuaternion(_clipQuat)
         _clipPoint.set(BAKED_CUT_X, 0.45, 0).applyMatrix4(dough.mesh.matrixWorld)
         dough.clipPlane.normal.copy(_clipNormal)
         dough.clipPlane.constant = -_clipNormal.dot(_clipPoint)
-        heelClip.normal.copy(_clipNormal).negate()
-        heelClip.constant = _clipNormal.dot(_clipPoint)
+        // Compose the heel's own local rotation on top of the loaf
+        // orientation: clipping happens in world space after the full
+        // transform chain, so the plane must follow the separating piece.
+        // Otherwise it keeps slicing the same cross-section out of the
+        // underlying sphere and the heel balloons into a second full dome.
+        cutDetails.heel.updateMatrixWorld(true)
+        _heelClipQuat.copy(_clipQuat).multiply(cutDetails.heel.quaternion)
+        _heelClipNormal.set(1, 0, 0).applyQuaternion(_heelClipQuat)
+        _heelClipPoint.set(BAKED_CUT_X, 0.45, 0).applyMatrix4(cutDetails.heel.matrixWorld)
+        heelClip.normal.copy(_heelClipNormal)
+        heelClip.constant = -_heelClipNormal.dot(_heelClipPoint)
       } else {
         dough.clipPlane.constant = 1e5
         heelClip.constant = -1e5
@@ -2004,11 +2021,6 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       cutDetails.heel.visible = p >= 0.9988
       heelMesh.castShadow = cutHandoff
       heelMesh.receiveShadow = cutHandoff
-      // The heel starts as the loaf's own dome in place; separation slides it
-      // out while turning its cut face toward the camera. Y-rotation preserves
-      // heights exactly, so grounding cannot break.
-      cutDetails.heel.position.set(heelSeparate * 0.38, 0, heelSeparate * 0.1)
-      cutDetails.heel.rotation.y = heelSeparate * 0.7
       cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)
         crumb.visible = fall > 0.002
