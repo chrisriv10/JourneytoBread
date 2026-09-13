@@ -1502,7 +1502,7 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // below are the only transparent surfaces, and their opacity never changes.
   const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022, transparent: false, opacity: 1 })
   const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021, transparent: false, opacity: 1 })
-  const crumbCapMaterial = new T.MeshStandardMaterial({ color: 0xffe8bd, roughness: 0.97, metalness: 0, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, transparent: false, opacity: 1 })
+  const crumbCapMaterial = new T.MeshStandardMaterial({ color: 0xffe8bd, roughness: 0.97, metalness: 0, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.032, transparent: false, opacity: 1 })
   // Cut-face lids use a plain unmapped crumb: the shared canvas texture's
   // baked blotches read as large brown stains at cap scale. Pore decals
   // carry all interior detail deliberately.
@@ -2004,11 +2004,11 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       cutDetails.heel.visible = p >= 0.9988
       heelMesh.castShadow = cutHandoff
       heelMesh.receiveShadow = cutHandoff
-      // The heel starts as the loaf's own dome in place; separation is a
-      // gentle slide plus a turn presenting its cut face to the camera.
-      // Y-rotation preserves heights exactly, so grounding cannot break.
-      cutDetails.heel.position.set(heelSeparate * 0.32, 0, heelSeparate * 0.08)
-      cutDetails.heel.rotation.y = heelSeparate * 0.22
+      // The heel starts as the loaf's own dome in place; separation slides it
+      // out while turning its cut face toward the camera. Y-rotation preserves
+      // heights exactly, so grounding cannot break.
+      cutDetails.heel.position.set(heelSeparate * 0.24, 0, heelSeparate * 0.1)
+      cutDetails.heel.rotation.y = heelSeparate * 0.55
       cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
         const fall = clamp01((knifeCut - delay) / 0.42)
         crumb.visible = fall > 0.002
