@@ -1377,6 +1377,22 @@ function rimContour(cut: CutContour) {
 
 
 // Deterministic clustered pores, guaranteed inside the sampled contour.
+// One or two gentle circular smoothing passes over a sampled contour.
+// Binomial weighting keeps broad baked curvature while removing resampling
+// ripple that would otherwise facet the rim and cap outlines.
+function smoothContour(contour: { y: number; z: number }[], passes: number) {
+  let current = contour.map((point) => ({ y: point.y, z: point.z }))
+  for (let pass = 0; pass < passes; pass += 1) {
+    const count = current.length
+    current = current.map((point, index) => {
+      const prev = current[(index - 1 + count) % count]
+      const next = current[(index + 1) % count]
+      return { y: (prev.y + point.y * 2 + next.y) * 0.25, z: (prev.z + point.z * 2 + next.z) * 0.25 }
+    })
+  }
+  return current
+}
+
 function insideContour(y: number, z: number, contour: { y: number; z: number }[]) {
   let inside = false
   for (let i = 0, j = contour.length - 1; i < contour.length; j = i++) {
@@ -1504,8 +1520,11 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // nothing here can ghost through transparency sorting. Decal pore materials
   // below are the only transparent surfaces, and their opacity never changes.
   const crumbMaterial = mat(0xffe8bd, quality, 'crumb', { roughness: 0.985, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, bumpScale: 0.022, transparent: false, opacity: 1 })
-  const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021, transparent: false, opacity: 1 })
-  const crumbCapMaterial = new T.MeshStandardMaterial({ color: 0xffe8bd, roughness: 0.97, metalness: 0, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.12, transparent: false, opacity: 1 })
+  const crustMaterial = mat(0xc08a49, quality, 'crust', { roughness: 0.9, bumpScale: 0.021, transparent: true, opacity: 1 })
+  const crumbCapMaterial = new T.MeshStandardMaterial({ color: 0xffe8bd, roughness: 0.97, metalness: 0, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.12, transparent: true, opacity: 1 })
+  // Crumbs keep their own opaque material: they fall from 0.989 while the
+  // caps only fade in over the reveal window, so sharing would break them.
+  const crumbBitMaterial = new T.MeshStandardMaterial({ color: 0xffe8bd, roughness: 0.97, metalness: 0, side: T.DoubleSide, emissive: 0x5b3219, emissiveIntensity: 0.018, transparent: false, opacity: 1 })
   // Cut-face lids use a plain unmapped crumb: the shared canvas texture's
   // baked blotches read as large brown stains at cap scale. Pore decals
   // carry all interior detail deliberately.
@@ -1514,9 +1533,13 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // Both cap layers derive from the sampled loaf cross-section: full-contour
   // crust with a slightly eroded crumb face, so the rim reads as real crust
   // thickness rather than a decal outline.
-  mesh(capGeometry(cut, contourShape(rimContour(cut)), BAKED_CUT_X - 0.0008, null), crustMaterial, mainCut)
-  const mainPores = sampleContourPores(4242, cut, 8)
-  const mainFace = mesh(capGeometry(cut, contourShape(cut.contour), BAKED_CUT_X + 0.0008, null), crumbCapMaterial, mainCut)
+  // Smooth once more here so rim, caps, and pore sampling all share one
+  // ripple-free contour. Pores are sampled against it too, so decals and
+  // displacement always land inside the faces that render.
+  const smoothCut: CutContour = { contour: smoothContour(cut.contour, 2), centroid: cut.centroid }
+  mesh(capGeometry(smoothCut, contourShape(rimContour(smoothCut)), BAKED_CUT_X - 0.0008, null), crustMaterial, mainCut)
+  const mainPores = sampleContourPores(4242, smoothCut, 8)
+  const mainFace = mesh(capGeometry(smoothCut, contourShape(smoothCut.contour), BAKED_CUT_X + 0.0008, null), crumbCapMaterial, mainCut)
   mainCut.visible = false
 
   const heel = new T.Group()
@@ -1524,8 +1547,8 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
   // The heel IS the removed dome: it renders the shared loaf geometry through
   // an inverse clip, so pre-separation it fits back exactly — same vertices,
   // same deformation, zero mismatch possible. Only the group pose animates.
-  const heelPores = sampleContourPores(4343, cut, 5)
-  mesh(capGeometry(cut, contourShape(cut.contour, true), BAKED_CUT_X - 0.0018, null, -1, true), crumbCapMaterial, heel)
+  const heelPores = sampleContourPores(4343, smoothCut, 5)
+  mesh(capGeometry(smoothCut, contourShape(smoothCut.contour, true), BAKED_CUT_X - 0.0018, null, -1, true), crumbCapMaterial, heel)
   addPores(heel, heelPores, BAKED_CUT_X - 0.0018, { edge: poreEdgeMaterial, cavity: poreCavityMaterial }, -1)
   heel.visible = false
   group.add(heel)
@@ -1538,7 +1561,7 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
     // Plain cap-colored crumbs scattered to the SIDES of the cut: crumbs
     // landing in front of the face footprint used to read as brown stains
     // on the crumb itself.
-    const crumb = mesh(crumbGeometry, crumbCapMaterial, group)
+    const crumb = mesh(crumbGeometry, crumbBitMaterial, group)
     const side = random() < 0.5 ? -1 : 1
     return {
       crumb,
@@ -1549,7 +1572,12 @@ function breadCutDetails(quality: QualityConfig, cut: CutContour) {
       drift: (random() - 0.5) * 0.12,
     }
   })
-  return { group, mainCut, heel, crumbs }
+  const setCapOpacity = (value: number) => {
+    const opacity = T.MathUtils.clamp(value, 0, 1)
+    crumbCapMaterial.opacity = opacity
+    crustMaterial.opacity = opacity
+  }
+  return { group, mainCut, heel, crumbs, setCapOpacity }
 }
 
 function contactShadow(parent: T.Object3D, width: number, depth: number) {
@@ -1658,7 +1686,7 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
   // deformation once, sample the cross-section ring at the cut plane, and
   // build the cap and slice from that contour. No hand-authored profile.
   dough.apply(1)
-  const cutDetails = breadCutDetails(quality, dough.sampleCutContour(BAKED_CUT_X, 144))
+  const cutDetails = breadCutDetails(quality, dough.sampleCutContour(BAKED_CUT_X, quality.mobile ? 120 : 216))
   // Keep the parent alive so the cap and separated heel can be revealed
   // independently without fading solid geometry over the loaf.
   cutDetails.group.visible = true
@@ -1979,13 +2007,14 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
       visibility.final.set(windowProgress(p, 0.94, 0.97))
       if (p >= 0.925) arcPosition(ovenDestination, finalDestination, finish, 0.28 * flourish, dough.mesh.position)
       dough.mesh.rotation.y += finish * -0.12
-      const knifeCut = windowProgress(p, 0.989, 0.997)
+      const knifeCut = windowProgress(p, 0.975, 0.996)
       // The loaf keeps valid baked topology through the knife travel; the
-      // blade motion sells the cut. At the handoff both clip planes engage:
-      // the main loaf keeps x < cut, the heel keeps x > cut, and the matching
-      // caps appear behind the blade. Solid pieces use discrete visibility.
-      const cutHandoff = p >= 0.9985
-      const heelSeparate = windowProgress(p, 0.998, 1)
+      // blade motion sells the cut. The eased reveal window opens the clips
+      // and fades the caps behind the blade; the heel separates after.
+      // Solid pieces use discrete visibility, never mid-air opacity pops.
+      const cutReveal = windowProgress(p, 0.996, 0.9985)
+      const cutHandoff = cutReveal > 0
+      const heelSeparate = windowProgress(p, 0.9985, 1)
       sampleVectorSplineKeyframes(p, knifePositionKeys, knifePosition)
       sampleVectorSplineKeyframes(p, knifeRotationKeys, knifeRotation)
       knife.position.copy(knifePosition)
@@ -2001,24 +2030,27 @@ export function createJourneySequence(quality: QualityConfig): JourneySequence {
         _clipNormal.set(-1, 0, 0).applyQuaternion(_clipQuat)
         _clipPoint.set(BAKED_CUT_X, 0.45, 0).applyMatrix4(dough.mesh.matrixWorld)
         dough.clipPlane.normal.copy(_clipNormal)
-        dough.clipPlane.constant = -_clipNormal.dot(_clipPoint)
+        dough.clipPlane.constant = T.MathUtils.lerp(1e5, -_clipNormal.dot(_clipPoint), cutReveal)
         // Compose the heel's own local rotation on top of the loaf
         // orientation: clipping happens in world space after the full
         // transform chain, so the plane must follow the separating piece.
         // Otherwise it keeps slicing the same cross-section out of the
         // underlying sphere and the heel balloons into a second full dome.
+        // NOTE: the engaged value keeps the negation (-dot). Without it the
+        // plane would keep the whole sphere instead of the heel side.
         cutDetails.heel.updateMatrixWorld(true)
         _heelClipQuat.copy(_clipQuat).multiply(cutDetails.heel.quaternion)
         _heelClipNormal.set(1, 0, 0).applyQuaternion(_heelClipQuat)
         _heelClipPoint.set(BAKED_CUT_X, 0.45, 0).applyMatrix4(cutDetails.heel.matrixWorld)
         heelClip.normal.copy(_heelClipNormal)
-        heelClip.constant = -_heelClipNormal.dot(_heelClipPoint)
+        heelClip.constant = T.MathUtils.lerp(-1e5, -_heelClipNormal.dot(_heelClipPoint), cutReveal)
       } else {
         dough.clipPlane.constant = 1e5
         heelClip.constant = -1e5
       }
       cutDetails.mainCut.visible = cutHandoff
-      cutDetails.heel.visible = p >= 0.9988
+      cutDetails.heel.visible = cutHandoff
+      cutDetails.setCapOpacity(cutHandoff ? cutReveal : 0)
       heelMesh.castShadow = cutHandoff
       heelMesh.receiveShadow = cutHandoff
       cutDetails.crumbs.forEach(({ crumb, delay, x, z, stretch, drift }, index) => {
